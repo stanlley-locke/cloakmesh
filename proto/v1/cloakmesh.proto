@@ -49,4 +49,27 @@ service CloakMeshNode {
   rpc Handshake(HandshakeInit) returns (HandshakeResponse);
   rpc SendEnvelope(Envelope) returns (Envelope);
   rpc KeepAlive(Ping) returns (Pong);
+  
+  // High-level communication (Phase 2+)
+  rpc ChatStream(stream ChatMessage) returns (stream ChatMessage);
+  rpc FileTransfer(stream FileChunk) returns (TransferAck);
+}
+
+message ChatMessage {
+  string sender = 1;
+  string text = 2;
+  google.protobuf.Timestamp sent_at = 3;
+}
+
+message FileChunk {
+  string file_id = 1;
+  string filename = 2;
+  bytes data = 3;
+  uint64 chunk_index = 4;
+  bool is_last = 5;
+}
+
+message TransferAck {
+  bool success = 1;
+  string message = 2;
 }

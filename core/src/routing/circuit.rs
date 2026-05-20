@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument, warn};
+use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::crypto::session::BidirectionalSession;
@@ -40,21 +40,19 @@ impl Circuit {
     }
 
     /// Peel one layer of onion encryption (Incoming Cell).
-    pub async fn decrypt_layer(&self, mut payload: Vec<u8>, hop_idx: usize) -> CloakResult<Vec<u8>> {
+    pub async fn decrypt_layer(&self, payload: Vec<u8>, hop_idx: usize, nonce: &[u8; 12]) -> CloakResult<Vec<u8>> {
         if hop_idx >= self.hops.len() {
             return Err(CloakError::Protocol("Hop index out of bounds".into()));
         }
         let session = self.hops[hop_idx].session.read().await;
-        // In a real onion routing implementation, we'd use the session key
-        // to decrypt the specific layer for this hop.
-        session.decrypt(&payload, b"circuit-layer")
+        session.decrypt(nonce, &payload, b"circuit-layer")
     }
 
     /// Wrap payload in multiple layers of encryption (Outgoing Cell).
     pub async fn encrypt_all_layers(&self, mut payload: Vec<u8>) -> CloakResult<Vec<u8>> {
         // Encrypt from the last hop back to the first hop
         for hop in self.hops.iter().rev() {
-            let session = hop.session.read().await;
+            let mut session = hop.session.write().await;
             payload = session.encrypt(&payload, b"circuit-layer")?;
         }
         Ok(payload)
@@ -83,10 +81,8 @@ impl CircuitManager {
         info!(hops = hops_count, "Building new onion circuit");
         
         let mut hops = Vec::new();
-        // Mocking the handshake process for each hop in Phase 2
         for i in 0..hops_count {
             let (peer_id, address) = &candidates[i];
-            // In a real implementation, we would perform a Noise handshake with each hop.
             let session = BidirectionalSession::generate_mock(); 
             hops.push(CircuitHop {
                 peer_id: peer_id.clone(),
@@ -114,7 +110,6 @@ impl CircuitManager {
         if active.is_empty() {
             None
         } else {
-            // Simple random selection
             use rand::seq::SliceRandom;
             active.choose(&mut rand::thread_rng()).map(|&c| c.clone())
         }

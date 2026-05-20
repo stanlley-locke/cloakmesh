@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
     let server = tonic::transport::Server::builder()
         .add_service(cloakmesh_core::proto::v1::cloak_mesh_node_server::CloakMeshNodeServer::from_arc(node.clone()))
         .add_service(cloakmesh_core::proto::v1::cloak_service_server::CloakServiceServer::from_arc(node.clone()))
-        .add_service(cloakmesh_core::proto::v1::capability_service_server::CapabilityServiceServer::from_arc(node))
+        .add_service(cloakmesh_core::proto::v1::capability_service_server::CapabilityServiceServer::from_arc(node.clone()))
         .serve(addr);
 
     // ── Phase 2 will add: ────────────────────────────────────────────────────

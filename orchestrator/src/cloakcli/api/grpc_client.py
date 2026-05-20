@@ -1,6 +1,8 @@
 import grpc
 import sys
 import os
+import time
+from google.protobuf.timestamp_pb2 import Timestamp
 
 # Add the generated proto directory to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -18,11 +20,27 @@ class CloakGrpcClient:
 
     def ping(self, nonce=123):
         try:
-            request = cloakmesh_pb2.Ping(nonce=nonce)
+            ts = Timestamp()
+            ts.FromSeconds(int(time.time()))
+            request = cloakmesh_pb2.Ping(nonce=nonce, sent_at=ts)
             response = self.node_stub.KeepAlive(request)
             return response
         except grpc.RpcError as e:
             print(f"gRPC error: {e}")
+            return None
+
+    def chat_stream(self, message_iterator):
+        try:
+            return self.node_stub.ChatStream(message_iterator)
+        except grpc.RpcError as e:
+            print(f"Chat stream error: {e}")
+            return []
+
+    def file_transfer(self, chunk_iterator):
+        try:
+            return self.node_stub.FileTransfer(chunk_iterator)
+        except grpc.RpcError as e:
+            print(f"File transfer error: {e}")
             return None
 
     def close(self):

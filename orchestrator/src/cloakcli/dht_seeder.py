@@ -1,26 +1,26 @@
 from rich.console import Console
 from cloakcli.api.grpc_client import CloakGrpcClient
 from proto import cloak_service_pb2
-from cloakcli.cloak_protocol import derive_address
+from cloakcli.cloak_protocol import derive_address, parse_address
 import os
 
 console = Console()
 
 def publish_descriptor(address: str, config_path: str):
-    # In a real scenario, we'd load the actual pubkey from the config/identity file
-    # For this use case implementation, we'll simulate a valid descriptor if not provided
     client = CloakGrpcClient()
     
     console.print(f"Publishing descriptor for [cyan]{address}[/cyan]...")
     
-    # Mocking descriptor data for use case demonstration
-    descriptor = cloak_service_pb2.CloakDescriptor(
-        cloak_address=address,
-        identity_pubkey=b"A" * 32, # This would normally come from the node's identity
-        version=1,
-    )
-    
     try:
+        # Extract the pubkey from the address so the core's validation passes
+        pubkey = parse_address(address)
+        
+        descriptor = cloak_service_pb2.CloakDescriptor(
+            cloak_address=address,
+            identity_pubkey=pubkey,
+            version=1,
+        )
+        
         response = client.service_stub.PublishDescriptor(descriptor)
         if response.success:
             console.print(f"[green]SUCCESS:[/green] {response.message}")

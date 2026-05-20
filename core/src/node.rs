@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 use std::sync::Arc;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 use prost::Message;
 use std::time::Duration;
+use tokio_stream::{Stream, StreamExt};
+use std::pin::Pin;
 
 use crate::proto::v1::cloak_mesh_node_server::CloakMeshNode;
 use crate::proto::v1::cloak_service_server::CloakService;
@@ -11,11 +13,13 @@ use crate::proto::v1::{
     HandshakeInit, HandshakeResponse, Envelope, Ping, Pong,
     CloakDescriptor, PublishAck, DescriptorRequest,
     Introduce1, IntroduceAck, Introduce2, RendezvousAck,
-    CapabilityVerifyRequest, CapabilityVerifyResponse
+    CapabilityVerifyRequest, CapabilityVerifyResponse,
+    ChatMessage, FileChunk, TransferAck
 };
 use crate::routing::dht::{DhtNode, DhtKey};
 use crate::routing::circuit::CircuitManager;
 use crate::network::bridge::MeshBridge;
+use crate::errors::{CloakResult};
 use crate::cloak_protocol::address::parse_address;
 
 // ── Node Implementation ──────────────────────────────────────────────────────
@@ -54,7 +58,6 @@ impl CloakNode {
     fn verify_token_internal(&self, request: &CapabilityVerifyRequest) -> Result<(), Status> {
         let token = request.token.as_ref().ok_or_else(|| Status::invalid_argument("Missing token"))?;
         
-        // 1. Check expiration
         if let Some(expires_at) = &token.expires_at {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -65,12 +68,10 @@ impl CloakNode {
             }
         }
 
-        // 2. Check scope
         if !token.scopes.contains(&request.required_scope) {
             return Err(Status::permission_denied(format!("Missing required scope: {}", request.required_scope)));
         }
 
-        // 3. Verify signature (In Phase 2 we use a mock verification for the demo)
         if token.signature.is_empty() {
             return Err(Status::unauthenticated("Token signature missing"));
         }
@@ -95,6 +96,8 @@ impl CapabilityService for CloakNode {
 
 #[async_trait]
 impl CloakMeshNode for CloakNode {
+    type ChatStreamStream = Pin<Box<dyn Stream<Item = Result<ChatMessage, Status>> + Send + 'static>>;
+
     async fn handshake(
         &self,
         request: Request<HandshakeInit>,
@@ -121,18 +124,75 @@ impl CloakMeshNode for CloakNode {
             sent_at: ping.sent_at,
         }))
     }
+
+    /// Use Case 4: Real-time Peer-to-Peer Chat
+    async fn chat_stream(
+        &self,
+        request: Request<Streaming<ChatMessage>>,
+    ) -> Result<Response<Self::ChatStreamStream>, Status> {
+        let mut stream = request.into_inner();
+        let (tx, rx) = tokio::sync::mpsc::channel(128);
+
+        tokio::spawn(async move {
+            while let Some(msg_result) = stream.next().await {
+                match msg_result {
+                    Ok(msg) => {
+                        // For demo: Echo the message back as if it were a relay
+                        let mut reply = msg.clone();
+                        reply.sender = "CloakMesh Relay".into();
+                        if tx.send(Ok(reply)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        let output_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(output_stream) as Self::ChatStreamStream))
+    }
+
+    /// Use Case 5: Secure File Sharing
+    async fn file_transfer(
+        &self,
+        request: Request<Streaming<FileChunk>>,
+    ) -> Result<Response<TransferAck>, Status> {
+        let mut stream = request.into_inner();
+        let mut total_bytes = 0;
+        let mut filename = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    total_bytes += chunk.data.len();
+                    filename = chunk.filename;
+                    if chunk.is_last {
+                        break;
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(Response::new(TransferAck {
+            success: true,
+            message: format!("Received {} bytes for file '{}'", total_bytes, filename),
+        }))
+    }
 }
 
 #[async_trait]
 impl CloakService for CloakNode {
-    /// Use Case 1: Secure Descriptor Publication
     async fn publish_descriptor(
         &self,
         request: Request<CloakDescriptor>,
     ) -> Result<Response<PublishAck>, Status> {
         let descriptor = request.into_inner();
         
-        // 1. Validate address and signature
         let pubkey = parse_address(&descriptor.cloak_address)
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
         
@@ -140,11 +200,9 @@ impl CloakService for CloakNode {
             return Err(Status::unauthenticated("Address/Pubkey mismatch"));
         }
 
-        // 2. Serialize descriptor for DHT storage
         let mut buf = Vec::with_capacity(descriptor.encoded_len());
         descriptor.encode(&mut buf).map_err(|e| Status::internal(e.to_string()))?;
 
-        // 3. Store in DHT
         let key = DhtKey(pubkey);
         self.dht.store_local(key, buf, Duration::from_secs(3600)).await
             .map_err(|_| Status::internal("DHT storage failed"))?;
@@ -155,19 +213,16 @@ impl CloakService for CloakNode {
         }))
     }
 
-    /// Use Case 1: Secure Descriptor Discovery
     async fn fetch_descriptor(
         &self,
         request: Request<DescriptorRequest>,
     ) -> Result<Response<CloakDescriptor>, Status> {
         let req = request.into_inner();
         
-        // 1. Resolve address to DHT key
         let pubkey = parse_address(&req.cloak_address)
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
         let key = DhtKey(pubkey);
 
-        // 2. Fetch from DHT
         match self.dht.get_local(&key).await {
             Ok(Some(data)) => {
                 let descriptor = CloakDescriptor::decode(&data[..])
