@@ -1,0 +1,28 @@
+syntax = "proto3";
+package cloakmesh.v1;
+
+enum CellSize {
+  CELL_256B = 0;
+  CELL_1KB  = 1;
+}
+
+message Cell {
+  bytes circuit_id = 1;
+  uint64 sequence = 2;
+  CellSize cell_size = 3;
+  bytes payload = 4;        // padded to cell_size
+  bool is_cover = 5;
+}
+
+message PaddingConfig {
+  CellSize cell_size = 1;
+  uint32 cover_flow_rate_pps = 2;   // cover packets per second during idle
+  uint32 jitter_max_ms = 3;
+  bool enabled = 4;
+}
+
+message CoverFlow {
+  string circuit_id = 1;
+  uint32 duration_secs = 2;
+  PaddingConfig config = 3;
+}

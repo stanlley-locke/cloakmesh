@@ -1,0 +1,40 @@
+# Rust
+target/
+*.pdb
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# WASM
+wasm/web/pkg/
+
+# Env & secrets
+.env
+*.env
+configs/secrets*.env
+configs/mainnet.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Proto generated
+orchestrator/src/proto/
+sdk/src/proto/
+core/src/proto/

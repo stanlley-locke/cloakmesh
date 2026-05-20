@@ -1,0 +1,16 @@
+node_id = "node-default"
+listen_port = 4001
+bootstrap_peers = []
+data_dir = "./data"
+log_level = "info"
+
+[circuit]
+min_hops = 2
+max_hops = 5
+default_hops = 3
+
+[traffic]
+cell_size_bytes = 256
+cover_flow_pps = 1
+jitter_max_ms = 50
+padding_enabled = true

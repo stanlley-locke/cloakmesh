@@ -1,0 +1,30 @@
+syntax = "proto3";
+package cloakmesh.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message NodeMetrics {
+  string node_id = 1;
+  uint64 active_circuits = 2;
+  uint64 bytes_relayed = 3;
+  double avg_circuit_latency_ms = 4;
+  uint64 dht_entries = 5;
+  double reputation_score = 6;
+  google.protobuf.Timestamp collected_at = 7;
+}
+
+message HealthStatus {
+  string node_id = 1;
+  bool healthy = 2;
+  string status_message = 3;
+  google.protobuf.Timestamp checked_at = 4;
+}
+
+service TelemetryService {
+  rpc GetMetrics(MetricsRequest) returns (NodeMetrics);
+  rpc GetHealth(HealthRequest) returns (HealthStatus);
+  rpc StreamMetrics(MetricsRequest) returns (stream NodeMetrics);
+}
+
+message MetricsRequest { string node_id = 1; }
+message HealthRequest  { string node_id = 1; }

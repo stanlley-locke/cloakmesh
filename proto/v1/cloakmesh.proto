@@ -1,0 +1,52 @@
+syntax = "proto3";
+package cloakmesh.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Peer identity & addressing
+message PeerIdentity {
+  bytes ed25519_pubkey = 1;   // 32 bytes
+  string cloak_address = 2;   // <base32(pubkey+checksum)>.cloak
+  uint32 version = 3;
+}
+
+// Noise handshake envelope
+message HandshakeInit {
+  bytes ephemeral_pubkey = 1; // X25519 ephemeral
+  bytes kyber_kem_ct = 2;     // Kyber-768 ciphertext (PQ hybrid)
+  bytes payload = 3;          // encrypted identity + nonce
+  uint32 version = 4;
+}
+
+message HandshakeResponse {
+  bytes ephemeral_pubkey = 1;
+  bytes kyber_kem_ct = 2;
+  bytes payload = 3;
+}
+
+// Generic encrypted cell (fixed-size padding enforced at transport layer)
+message Envelope {
+  bytes circuit_id = 1;       // 16 bytes
+  uint64 sequence = 2;
+  bytes nonce = 3;            // 12 bytes ChaCha20-Poly1305
+  bytes ciphertext = 4;       // padded to 256B or 1KB cell
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+// Ping/keepalive
+message Ping {
+  uint64 nonce = 1;
+  google.protobuf.Timestamp sent_at = 2;
+}
+
+message Pong {
+  uint64 nonce = 1;
+  google.protobuf.Timestamp sent_at = 2;
+}
+
+// Core node RPC service
+service CloakMeshNode {
+  rpc Handshake(HandshakeInit) returns (HandshakeResponse);
+  rpc SendEnvelope(Envelope) returns (Envelope);
+  rpc KeepAlive(Ping) returns (Pong);
+}

@@ -1,0 +1,38 @@
+syntax = "proto3";
+package cloakmesh.v1;
+
+message DhtStore {
+  bytes key = 1;
+  bytes value = 2;
+  uint64 ttl_secs = 3;
+  bytes signature = 4;
+}
+
+message DhtFetch {
+  bytes key = 1;
+}
+
+message DhtFetchResponse {
+  bytes value = 1;
+  bytes merkle_proof = 2;   // serialized Merkle inclusion proof
+  bool found = 3;
+}
+
+message DhtVerifyProof {
+  bytes key = 1;
+  bytes value = 2;
+  bytes merkle_proof = 3;
+  bytes expected_root = 4;
+}
+
+message DhtVerifyResponse {
+  bool valid = 1;
+}
+
+service DhtService {
+  rpc Store(DhtStore) returns (DhtStoreAck);
+  rpc Fetch(DhtFetch) returns (DhtFetchResponse);
+  rpc VerifyProof(DhtVerifyProof) returns (DhtVerifyResponse);
+}
+
+message DhtStoreAck { bool success = 1; }

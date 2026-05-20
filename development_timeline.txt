@@ -1,0 +1,422 @@
+================================================================================
+CLOAKMESH: COMPLETE WORKING GUIDELINE (STEP-BY-STEP ROADMAP)
+================================================================================
+Version: 1.0
+Scope: End-to-end development from workspace initialization to public release
+Format: Sequential phases with deliverables, dependencies, and validation checkpoints
+================================================================================
+
+================================================================================
+PHASE 0: FOUNDATION & WORKSPACE INITIALIZATION
+================================================================================
+Goal: Establish a clean, reproducible, polyglot development environment.
+
+Steps:
+  0.1  Install prerequisites
+       - Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+       - Python 3.10+: sudo apt install python3 python3-pip python3-venv
+       - Poetry: curl -sSL https://install.python-poetry.org | python3 -
+       - Node.js 18+: curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash && sudo apt install nodejs
+       - protoc: sudo apt install protobuf-compiler
+       - just: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+       - Docker & Docker Compose
+
+  0.2  Initialize project root & version control
+       - mkdir cloakmesh && cd cloakmesh
+       - git init
+       - Add .gitignore (target/, .venv/, node_modules/, *.egg-info, .env, dist/)
+
+  0.3  Configure Rust workspace
+       - Create root Cargo.toml with [workspace] members = ["core", "wasm"]
+       - Create core/ and wasm/ directories with cargo new --lib
+
+  0.4  Configure Python orchestrator
+       - mkdir -p orchestrator/src/cloakcli orchestrator/tests
+       - poetry init (non-interactive, set name/version/dependencies)
+       - Add pyproject.toml scripts: cloakcli = "cloakcli.main:app"
+
+  0.5  Configure TypeScript SDK
+       - mkdir -p sdk/src sdk/examples sdk/tests
+       - npm init -y
+       - Install dev deps: typescript, ts-node, jest, eslint, prettier
+
+  0.6  Initialize tooling & CI skeleton
+       - Add rustfmt.toml, .cargo/config.toml, .editorconfig
+       - Create .github/workflows/ci.yml (placeholder)
+       - Create Justfile with empty targets
+
+Checkpoint:
+  ✅ just install-deps succeeds
+  ✅ cargo build, poetry install, npm install run cleanly
+  ✅ git status shows clean workspace
+Dependency: None (First phase)
+================================================================================
+
+================================================================================
+PHASE 1: PROTOCOL DEFINITION & CROSS-LANGUAGE BINDINGS
+================================================================================
+Goal: Establish the single source of truth for network messages and generate bindings.
+
+Steps:
+  1.1  Draft core protobuf schemas in proto/v1/
+       - cloakmesh.proto (Handshake, Ping, StreamData, PeerIdentity, Envelope)
+       - cloak_service.proto (Descriptor, Introduce, Rendezvous, Capability)
+       - dht.proto (Store, Fetch, VerifyProof)
+       - telemetry.proto (Metrics, Health, LogStream)
+       - traffic.proto (Cell, PaddingConfig, CoverFlow)
+
+  1.2  Set up codegen pipeline
+       - proto/generate.sh: protoc calls for Rust (tonic-build), Python (grpcio-tools), TS (@grpc/proto-loader + grpc-web)
+       - Update core/build.rs to invoke tonic_build::compile_protos()
+
+  1.3  Generate & validate bindings
+       - Run just proto-gen
+       - Verify generated files exist in core/src/, orchestrator/src/proto/, sdk/src/proto/
+       - Write minimal smoke tests importing generated types in each language
+
+  1.4  Establish versioning strategy
+       - Add version field to all proto messages
+       - Document backward/forward compatibility rules in proto/README.md
+
+Checkpoint:
+  ✅ All .proto files compile without errors
+  ✅ Generated code loads in Rust, Python, TS
+  ✅ Cross-type parity validated (same field names, types, enums)
+Dependency: Phase 0
+================================================================================
+
+================================================================================
+PHASE 2: RUST CORE ENGINE (NETWORK, CRYPTO, CLOAK PROTOCOL)
+================================================================================
+Goal: Implement the secure, high-performance backbone of CloakMesh.
+
+Steps:
+  2.1  Cryptography Module (core/src/crypto/)
+       - Ed25519 keypair generation, signing, verification
+       - X25519 ECDH key exchange
+       - Kyber-768 hybrid PQ wrapper (use libcrux or pqcrypto)
+       - Noise protocol handshake (XX pattern, ChaChaPoly, BLAKE2s)
+       - Session key derivation & rotation logic
+       - ZK proof stub interface (trait-based, mock for now)
+
+  2.2  Network & Transport Layer (core/src/network/)
+       - QUIC & TCP transport adapters
+       - NAT traversal helpers (STUN/UPnP, port mapping, hole punching)
+       - libp2p bridge for peer discovery & connection pooling
+       - Stream multiplexing (mplex/yamux)
+       - Connection lifecycle & heartbeat
+
+  2.3  Routing & DHT (core/src/routing/)
+       - Kademlia routing table (XOR distance, k-buckets, refresh)
+       - GossipSub integration for pub/sub messages
+       - Adaptive circuit builder (2-5 hops, threat-model config)
+       - Rendezvous point selector & cookie manager
+       - Reputation scoring system (latency, uptime, behavior)
+
+  2.4  Cloak Protocol Implementation (core/src/cloak_protocol/)
+       - .cloak address parser & validator (base32 + Bech32 checksum)
+       - Descriptor assembler & Merkle root computation
+       - Signed descriptor verification (Ed25519 + timestamp/nonce)
+       - Introduce flow (INTRODUCE1/2, cookie relay, capability validation)
+       - Traffic padding engine (fixed cells, jitter, cover flow scheduler)
+
+  2.5  Storage & Telemetry (core/src/storage/, core/src/telemetry/)
+       - In-memory KV cache with TTL for descriptors/sessions
+       - Write-ahead journal for crash recovery
+       - Prometheus metrics exporter
+       - Tracing integration (env-filter, structured logs)
+
+  2.6  Node Entrypoint & CLI (core/src/main.rs, core/src/config.rs)
+       - Parse TOML config & CLI args
+       - Initialize crypto identity
+       - Spawn tokio runtime, bind gRPC + QUIC listeners
+       - Graceful shutdown handling (SIGTERM, drain connections)
+
+  2.7  Core Testing (core/tests/)
+       - Unit tests for crypto, address parsing, padding
+       - Integration tests: local 3-node handshake & stream
+       - Fuzzing targets (proto deserialization, address decode)
+
+Checkpoint:
+  ✅ Core compiles with --release, zero warnings
+  ✅ Local test: 3 nodes discover, handshake, stream data
+  ✅ All core tests pass, coverage >70%
+Dependency: Phase 1
+================================================================================
+
+================================================================================
+PHASE 3: WASM & BROWSER INTEGRATION
+================================================================================
+Goal: Enable lightweight CloakMesh peers and crypto operations in web environments.
+
+Steps:
+  3.1  Configure wasm-bindgen in wasm/Cargo.toml
+       - Target web, output dir wasm/web/pkg
+       - Expose crypto, session manager, address parser
+
+  3.2  Implement WASM modules
+       - crypto_bindings.rs: Ed25519/X25519 via webcrypto fallback or pure Rust
+       - session_manager.rs: Browser-side cloak session lifecycle
+       - ffi.rs: Safe JS<->Rust type conversions
+
+  3.3  Build & test in browser
+       - Run wasm-pack build --target web
+       - Create wasm/web/index.html + worker.js
+       - Test session creation, descriptor fetch, message send/receive
+
+Checkpoint:
+  ✅ wasm-pack builds successfully
+  ✅ Browser console loads module, runs crypto ops
+  ✅ Worker handles async session flow without main-thread blocking
+Dependency: Phase 2.1, Phase 2.4
+================================================================================
+
+================================================================================
+PHASE 4: PYTHON ORCHESTRATOR & CLI
+================================================================================
+Goal: Provide developer-friendly node management, testing, and automation tools.
+
+Steps:
+  4.1  CLI Framework (orchestrator/src/cloakcli/main.py)
+       - Typer app with subcommands: node, service, auth, testnet, dht
+       - Rich console output (tables, spinners, progress bars)
+       - Config loading from TOML + env vars
+
+  4.2  gRPC Client & Node Manager
+       - Auto-generate Python stubs from proto
+       - NodeManager: start/stop/restart core binary via subprocess
+       - Health checker: ping, latency, descriptor status
+
+  4.3  Service & DHT Tools
+       - dht_seeder.py: publish descriptors, verify Merkle proofs
+       - auth_generator.py: create capability tokens with expiry/scope
+       - traffic_simulator.py: generate cover flows, test padding resilience
+
+  4.4  Testing & Validation (orchestrator/tests/)
+       - pytest fixtures for mock gRPC server
+       - Protocol conformance tests
+       - Load simulation scripts
+
+Checkpoint:
+  ✅ cloakcli --help shows full command tree
+  ✅ just run-orchestrator connects to Rust core
+  ✅ All Python tests pass, linting clean
+Dependency: Phase 2.6, Phase 1
+================================================================================
+
+================================================================================
+PHASE 5: TYPESCRIPT SDK & WEB CLIENT
+================================================================================
+Goal: Deliver a production-ready SDK and reference UI for developers & end users.
+
+Steps:
+  5.1  Client Adapters (sdk/src/client/)
+       - gRPC client wrapper with retry/backoff
+       - WebSocket fallback for browser environments
+       - HTTP proxy bridge for CORS-restricted contexts
+
+  5.2  Cloak Session Manager (sdk/src/cloak/)
+       - Address parser & validation
+       - Descriptor fetcher (gRPC + DHT fallback)
+       - RP connector with cookie/secret exchange
+       - Capability token injector
+
+  5.3  Crypto & Type System (sdk/src/crypto/, sdk/src/types/)
+       - WASM loader with dynamic import fallback
+       - Key store (IndexedDB + memory cache)
+       - TypeScript interfaces mirroring proto + Zod validation
+       - Custom error hierarchy (NetworkError, AuthError, ProtocolError)
+
+  5.4  Example Applications (sdk/examples/)
+       - node_cli/: Script demonstrating server-side session flow
+       - web_ui/: Vite + React dashboard (connect, send messages, view metrics)
+
+  5.5  SDK Testing (sdk/tests/)
+       - Unit tests for parsers, validators, retry logic
+       - Integration tests against local Rust node
+       - E2E browser tests (Playwright)
+
+Checkpoint:
+  ✅ npm run build produces clean dist/
+  ✅ SDK connects to local node, completes full cloak handshake
+  ✅ All tests pass, TypeScript strict mode enabled
+Dependency: Phase 3, Phase 2.4
+================================================================================
+
+================================================================================
+PHASE 6: SECURITY HARDENING & COMPREHENSIVE TESTING
+================================================================================
+Goal: Validate security guarantees, fix vulnerabilities, and optimize performance.
+
+Steps:
+  6.1  Static & Dependency Auditing
+       - cargo audit, cargo-udeps, clippy -- -D warnings
+       - npm audit, poetry check, pip-audit
+       - Snyk/Dependabot integration
+
+  6.2  Fuzzing & Property Testing
+       - cargo-fuzz for proto deserialization, address parsing
+       - Hypothesis (Python) for session state machine
+       - TS fast-check for capability token generation
+
+  6.3  Threat Model Validation
+       - Traffic correlation test: run mitmproxy + Wireshark, verify fixed cells
+       - Replay attack simulation: duplicate envelopes, verify nonce/timestamp rejection
+       - Descriptor poisoning test: inject fake Merkle roots, verify DHT client rejects
+       - Sybil resistance test: spawn 50 low-rep nodes, verify routing ignores them
+
+  6.4  Performance & Load Testing
+       - k6 scripts for concurrent sessions, descriptor fetches, RP connections
+       - Benchmark crypto ops, DHT lookups, padding overhead
+       - Optimize hot paths (zero-copy buffers, async batching, connection pooling)
+
+Checkpoint:
+  ✅ Zero critical/high audit findings
+  ✅ Fuzzing runs 100k+ iterations without crashes
+  ✅ Load test handles 5k concurrent sessions with <5% packet loss
+  ✅ Traffic analysis shows no plaintext/metadata leaks
+Dependency: Phases 2-5
+================================================================================
+
+PHASE 7: CI/CD & INFRASTRUCTURE AUTOMATION
+================================================================================
+Goal: Automate builds, tests, releases, and infrastructure provisioning.
+
+Steps:
+  7.1  GitHub Actions Workflows (.github/workflows/)
+       - ci.yml: lint, test, build, coverage, proto check
+       - audit.yml: cargo audit, npm audit, poetry check
+       - release.yml: tag, build artifacts, publish crates/npm/pypi
+       - fuzz.yml: scheduled cargo-fuzz runs, upload corpus
+
+  7.2  Containerization (deploy/docker/)
+       - Multi-stage Dockerfiles (distroless base, non-root user)
+       - Docker Compose for local 3-node testnet + monitoring
+       - Testnet compose with DHT seeders & load balancer
+
+  7.3  Kubernetes & IaC (deploy/k8s/, deploy/terraform/)
+       - Helm chart for core nodes, orchestrator, monitoring stack
+       - Terraform modules for AWS/GCP (VPC, security groups, IAM)
+       - Ansible playbooks for bare-metal/bootstrap setup
+
+  7.4  Observability (deploy/monitoring/)
+       - Prometheus scrape configs, Grafana dashboards
+       - Loki log aggregation, alerting rules
+       - Custom metrics: circuit latency, descriptor fetch time, padding ratio
+
+Checkpoint:
+  ✅ CI passes on PR, auto-releases on tag
+  ✅ docker compose up -d brings up healthy testnet
+  ✅ Grafana shows real-time metrics from nodes
+Dependency: Phase 6
+================================================================================
+
+================================================================================
+PHASE 8: DEPLOYMENT & OPERATIONS
+================================================================================
+Goal: Launch a stable public testnet and establish operational procedures.
+
+Steps:
+  8.1  Bootstrap Node Deployment
+       - Provision 3-5 high-availability seed nodes (cloud + bare metal)
+       - Configure firewall, TLS, rate limiting, backup scripts
+       - Run initial DHT seeding & reputation warm-up
+
+  8.2  Monitoring & Incident Response
+       - Set up PagerDuty/Slack alerts for node downtime, DHT failures
+       - Document key rotation, descriptor invalidation, emergency shutdown
+       - Create runbooks: node recovery, DHT resync, traffic anomaly response
+
+  8.3  Public Testnet Launch
+       - Publish testnet addresses, DHT bootstrap list, SDK docs
+       - Open bug bounty program (HackerOne/GitHub Sponsors)
+       - Collect telemetry, monitor abuse/correlation attempts
+
+Checkpoint:
+  ✅ Testnet runs 72h with <1% node drop rate
+  ✅ All monitoring dashboards live & alerting functional
+  ✅ Community reports handled via triage process
+Dependency: Phase 7
+================================================================================
+
+================================================================================
+PHASE 9: DOCUMENTATION & RELEASE
+================================================================================
+Goal: Prepare project for public consumption, contribution, and production use.
+
+Steps:
+  9.1  Technical Documentation (docs/)
+       - PROTOCOL.md: Full .cloak spec, 9 Acts, crypto, traffic model
+       - ARCHITECTURE.md: Layer diagram, polyglot flow, data lifecycle
+       - THREAT_MODEL.md: Assumptions, mitigations, limitations
+       - API_REFERENCE.md: gRPC/SDK endpoints, types, error codes
+       - DEPLOYMENT.md: Docker, K8s, bare-metal, testnet join guide
+
+  9.2  User & Contributor Docs
+       - README.md: Quickstart, architecture, roadmap, license
+       - CONTRIBUTING.md: Branch model, PR template, code style, issue labels
+       - CODE_OF_CONDUCT.md, SECURITY.md, CHANGELOG.md
+
+  9.3  Release Process
+       - Semantic versioning (v0.1.0-beta -> v0.1.0 -> v1.0.0)
+       - Crate/npm/pypi publication scripts
+       - Signed releases (cosign, gpg), checksum manifests
+
+Checkpoint:
+  ✅ All docs render cleanly (Markdown, Sphinx, or Docusaurus)
+  ✅ v0.1.0 tagged, artifacts published, changelog complete
+  ✅ Contributor onboarding tested end-to-end
+Dependency: Phase 8
+================================================================================
+
+================================================================================
+PHASE 10: POST-LAUNCH MAINTENANCE & ROADMAP
+================================================================================
+Goal: Sustain project health, iterate on features, and scale community.
+
+Steps:
+  10.1  Bug Triage & Performance Tuning
+        - Weekly triage of GitHub issues & PRs
+        - Profile hot paths, reduce latency, optimize memory
+        - Update dependencies, patch CVEs
+
+  10.2  Feature Backlog Execution
+        - v0.2: ZK capability proofs, dynamic IP rotation, advanced routing
+        - v0.3: Mobile SDKs (React Native, Flutter), native desktop apps
+        - v1.0: Mainnet readiness, formal audit, governance module
+
+  10.3  Community & Ecosystem Growth
+        - Developer grants, hackathons, tutorial series
+        - Integration partners (Matrix, IPFS, decentralized identity)
+        - Ambassador program, translation/localization
+
+  10.4  Long-Term Sustainability
+        - Open source foundation or DAO structure
+        - Funding strategy (grants, donations, enterprise support)
+        - Continuous security audit cycle (quarterly)
+
+Checkpoint:
+  ✅ Active community channels, regular releases
+  ✅ Audit completed, v1.0 roadmap on track
+  ✅ Project self-sustaining via ecosystem contributions
+Dependency: Phase 9
+================================================================================
+
+================================================================================
+FINAL NOTES & BEST PRACTICES
+================================================================================
+- Always run just lint && just test before committing
+- Never merge proto changes without regenerating all bindings
+- Keep cryptography isolated; never trust unvalidated network input
+- Use structured logging; avoid PII in telemetry
+- Rotate keys & certificates regularly; automate where possible
+- Document threat model updates with every protocol change
+- Prioritize user sovereignty: no telemetry without explicit opt-in
+
+SECURITY CONTACT: security@cloakmesh.network (PGP: 0xABCDEF1234567890)
+CONTRIBUTION GUIDELINES: See CONTRIBUTING.md & docs/
+ROADMAP TRACKING: GitHub Projects / Linear / Jira
+
+================================================================================
+END OF WORKING GUIDELINE
+================================================================================

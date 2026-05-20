@@ -1,0 +1,63 @@
+syntax = "proto3";
+package cloakmesh.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// .cloak service descriptor published to DHT
+message CloakDescriptor {
+  string cloak_address = 1;
+  repeated IntroductionPoint intro_points = 2;
+  bytes identity_pubkey = 3;          // Ed25519 32B
+  bytes hybrid_pq_pubkey = 4;         // X25519+Kyber-768 combined
+  bytes signature = 5;                // Ed25519 over descriptor body
+  bytes merkle_root = 6;              // 32B SHA-256 Merkle root
+  google.protobuf.Timestamp issued_at = 7;
+  uint64 nonce = 8;
+  AuthPolicy auth_policy = 9;
+  uint32 version = 10;
+}
+
+message IntroductionPoint {
+  string peer_id = 1;
+  string address = 2;                 // host:port
+  bytes auth_key = 3;
+}
+
+enum AuthPolicy {
+  PUBLIC = 0;
+  CAPABILITY_REQUIRED = 1;
+  ZK_GATED = 2;
+}
+
+// Rendezvous cookie (client -> RP)
+message RendezvousCookie {
+  bytes cookie = 1;                   // 32B random
+  bytes ephemeral_pubkey = 2;         // X25519
+  string rp_address = 3;
+}
+
+// INTRODUCE1: client -> intro point -> service
+message Introduce1 {
+  string intro_point_id = 1;
+  bytes encrypted_payload = 2;        // encrypted for service: RP addr + cookie + capability
+  bytes capability_token = 3;
+}
+
+// INTRODUCE2: service -> RP
+message Introduce2 {
+  bytes cookie = 1;
+  bytes session_key_material = 2;
+  string circuit_id = 3;
+}
+
+service CloakService {
+  rpc PublishDescriptor(CloakDescriptor) returns (PublishAck);
+  rpc FetchDescriptor(DescriptorRequest) returns (CloakDescriptor);
+  rpc Introduce(Introduce1) returns (IntroduceAck);
+  rpc ConnectRendezvous(Introduce2) returns (RendezvousAck);
+}
+
+message PublishAck    { bool success = 1; string message = 2; }
+message DescriptorRequest { string cloak_address = 1; }
+message IntroduceAck  { bool accepted = 1; }
+message RendezvousAck { bool matched = 1; string circuit_id = 2; }

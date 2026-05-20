@@ -1,0 +1,270 @@
+cloakmesh/
+├── Cargo.toml
+├── pyproject.toml
+├── package.json
+├── Justfile
+├── README.md
+├── LICENSE
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── CHANGELOG.md
+├── .gitignore
+├── .editorconfig
+├── rust-toolchain.toml
+├── rustfmt.toml
+├── .cargo/
+│   └── config.toml
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       ├── release.yml
+│       ├── audit.yml
+│       └── fuzz.yml
+├── proto/
+│   ├── v1/
+│   │   ├── cloakmesh.proto
+│   │   ├── cloak_service.proto
+│   │   ├── dht.proto
+│   │   ├── capability.proto
+│   │   ├── telemetry.proto
+│   │   └── traffic.proto
+│   ├── generate.sh
+│   └── README.md
+├── core/
+│   ├── Cargo.toml
+│   ├── build.rs
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── main.rs
+│   │   ├── config.rs
+│   │   ├── types.rs
+│   │   ├── errors.rs
+│   │   ├── utils.rs
+│   │   ├── crypto/
+│   │   │   ├── mod.rs
+│   │   │   ├── ed25519.rs
+│   │   │   ├── x25519.rs
+│   │   │   ├── kyber.rs
+│   │   │   ├── noise.rs
+│   │   │   ├── session.rs
+│   │   │   └── zk.rs
+│   │   ├── network/
+│   │   │   ├── mod.rs
+│   │   │   ├── transport.rs
+│   │   │   ├── quic.rs
+│   │   │   ├── tcp.rs
+│   │   │   ├── nat.rs
+│   │   │   └── libp2p_bridge.rs
+│   │   ├── routing/
+│   │   │   ├── mod.rs
+│   │   │   ├── dht.rs
+│   │   │   ├── gossip.rs
+│   │   │   ├── circuit.rs
+│   │   │   ├── rendezvous.rs
+│   │   │   └── reputation.rs
+│   │   ├── cloak_protocol/
+│   │   │   ├── mod.rs
+│   │   │   ├── address.rs
+│   │   │   ├── descriptor.rs
+│   │   │   ├── introduce.rs
+│   │   │   ├── capability.rs
+│   │   │   ├── traffic.rs
+│   │   │   └── merkle.rs
+│   │   ├── storage/
+│   │   │   ├── mod.rs
+│   │   │   ├── kv.rs
+│   │   │   ├── cache.rs
+│   │   │   └── journal.rs
+│   │   └── telemetry/
+│   │       ├── mod.rs
+│   │       ├── metrics.rs
+│   │       ├── tracing.rs
+│   │       └── prometheus.rs
+│   ├── tests/
+│   │   ├── integration_test.rs
+│   │   ├── crypto_test.rs
+│   │   ├── protocol_test.rs
+│   │   └── routing_test.rs
+│   ├── benches/
+│   │   ├── dht_bench.rs
+│   │   ├── crypto_bench.rs
+│   │   └── traffic_bench.rs
+│   └── examples/
+│       ├── bootstrap_node.rs
+│       ├── rendezvous_relay.rs
+│       └── cloak_client.rs
+├── wasm/
+│   ├── Cargo.toml
+│   ├── build.rs
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── crypto_bindings.rs
+│   │   ├── session_manager.rs
+│   │   └── ffi.rs
+│   ├── web/
+│   │   ├── index.html
+│   │   ├── worker.js
+│   │   ├── pkg/
+│   │   └── package.json
+│   └── tests/
+│       └── wasm_test.js
+├── orchestrator/
+│   ├── pyproject.toml
+│   ├── poetry.lock
+│   ├── src/
+│   │   └── cloakcli/
+│   │       ├── __init__.py
+│   │       ├── main.py
+│   │       ├── node_manager.py
+│   │       ├── dht_seeder.py
+│   │       ├── auth_generator.py
+│   │       ├── traffic_simulator.py
+│   │       ├── health_checker.py
+│   │       ├── config_loader.py
+│   │       ├── utils/
+│   │       │   ├── __init__.py
+│   │       │   ├── logging.py
+│   │       │   └── formatters.py
+│   │       └── api/
+│   │           ├── __init__.py
+│   │           ├── grpc_client.py
+│   │           └── rest_proxy.py
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── test_cli.py
+│   │   ├── test_protocol.py
+│   │   ├── test_traffic.py
+│   │   └── conftest.py
+│   ├── scripts/
+│   │   ├── run_dev.sh
+│   │   └── seed_dht.py
+│   └── docs/
+│       ├── cli_reference.md
+│       └── deployment.md
+├── sdk/
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── jest.config.js
+│   ├── .eslintrc.json
+│   ├── src/
+│   │   ├── index.ts
+│   │   ├── client/
+│   │   │   ├── grpc_client.ts
+│   │   │   ├── ws_adapter.ts
+│   │   │   └── http_fallback.ts
+│   │   ├── cloak/
+│   │   │   ├── session.ts
+│   │   │   ├── address_parser.ts
+│   │   │   ├── descriptor_fetcher.ts
+│   │   │   ├── rp_connector.ts
+│   │   │   └── capability_manager.ts
+│   │   ├── crypto/
+│   │   │   ├── webcrypto_adapter.ts
+│   │   │   ├── wasm_bridge.ts
+│   │   │   └── key_store.ts
+│   │   ├── types/
+│   │   │   ├── index.ts
+│   │   │   ├── proto.d.ts
+│   │   │   └── config.ts
+│   │   ├── utils/
+│   │   │   ├── base32.ts
+│   │   │   ├── errors.ts
+│   │   │   └── retry.ts
+│   │   └── telemetry/
+│   │       ├── metrics.ts
+│   │       └── logger.ts
+│   ├── examples/
+│   │   ├── web_ui/
+│   │   │   ├── package.json
+│   │   │   ├── vite.config.ts
+│   │   │   ├── index.html
+│   │   │   ├── src/
+│   │   │   │   ├── main.tsx
+│   │   │   │   ├── App.tsx
+│   │   │   │   ├── components/
+│   │   │   │   ├── hooks/
+│   │   │   │   └── styles/
+│   │   │   └── public/
+│   │   └── node_cli/
+│   │       ├── package.json
+│   │       └── index.ts
+│   └── tests/
+│       ├── unit/
+│       ├── integration/
+│       └── e2e/
+├── deploy/
+│   ├── docker/
+│   │   ├── core.Dockerfile
+│   │   ├── orchestrator.Dockerfile
+│   │   └── sdk.Dockerfile
+│   ├── docker-compose.yml
+│   ├── docker-compose.testnet.yml
+│   ├── k8s/
+│   │   ├── base/
+│   │   ├── overlays/
+│   │   │   ├── dev/
+│   │   │   ├── staging/
+│   │   │   └── prod/
+│   │   └── helm/
+│   │       ├── Chart.yaml
+│   │       ├── values.yaml
+│   │       └── templates/
+│   ├── terraform/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── ansible/
+│   │   ├── playbook.yml
+│   │   ├── inventory/
+│   │   └── roles/
+│   └── monitoring/
+│       ├── prometheus.yml
+│       ├── grafana/
+│       │   ├── dashboards/
+│       │   └── provisioning/
+│       └── loki/
+│           └── loki-config.yaml
+├── configs/
+│   ├── default.toml
+│   ├── testnet.toml
+│   ├── mainnet.toml
+│   ├── logging.yaml
+│   └── secrets.example.env
+├── scripts/
+│   ├── setup.sh
+│   ├── clean.sh
+│   ├── run_testnet.sh
+│   ├── gen_keys.sh
+│   ├── docker_run.sh
+│   └── verify_protocol.sh
+├── tests/
+│   ├── e2e/
+│   │   ├── scenario_full_connect.test.sh
+│   │   ├── scenario_traffic_analysis.test.sh
+│   │   └── scenario_capability_auth.test.sh
+│   ├── fixtures/
+│   │   ├── descriptors/
+│   │   ├── keys/
+│   │   └── payloads/
+│   └── fuzz/
+│       ├── proto_fuzz.rs
+│       └── crypto_fuzz.py
+├── docs/
+│   ├── PROTOCOL.md
+│   ├── ARCHITECTURE.md
+│   ├── THREAT_MODEL.md
+│   ├── SECURITY_AUDIT.md
+│   ├── DEPLOYMENT.md
+│   ├── API_REFERENCE.md
+│   ├── TROUBLESHOOTING.md
+│   ├── CONTRIBUTING_GUIDE.md
+│   └── RELEASE_CHECKLIST.md
+└── assets/
+    ├── logo.svg
+    ├── logo_dark.svg
+    ├── banner.png
+    └── icons/
+        ├── node.svg
+        ├── shield.svg
+        └── mesh.svg

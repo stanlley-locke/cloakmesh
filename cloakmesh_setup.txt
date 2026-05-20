@@ -1,0 +1,380 @@
+================================================================================
+CLOAKMESH: PROJECT INITIALIZATION & .CLOAK PROTOCOL SPECIFICATION
+================================================================================
+Version: 1.0-Draft
+Languages: Rust (Workspace), Python 3.10+, TypeScript 5.0+
+License: Apache-2.0
+================================================================================
+
+================================================================================
+SECTION 1: COMPLETE PROJECT FILE STRUCTURE
+================================================================================
+
+cloakmesh/
+├── Cargo.toml                  # Root workspace manifest
+├── Justfile                    # Unified task runner (build, test, deploy)
+├── README.txt                  # Project overview & quickstart
+├── CLOAKMESH_SETUP.txt         # This file
+│
+├── proto/                      # Protocol definitions (single source of truth)
+│   ├── cloakmesh.proto         # Core RPC & message schemas
+│   ├── cloak_service.proto     # .cloak descriptor & rendezvous schemas
+│   └── gen.sh                  # Cross-language binding generator script
+│
+├── core/                       # Rust Workspace Crate (Network & Crypto Engine)
+│   ├── Cargo.toml
+│   ├── build.rs                # Protobuf codegen
+│   └── src/
+│       ├── main.rs             # Node entrypoint & runtime bootstrap
+│       ├── lib.rs              # Public API exports
+│       ├── crypto.rs           # Ed25519/X25519/Kyber hybrid crypto
+│       ├── network/
+│       │   ├── mod.rs
+│       │   ├── transport.rs    # QUIC/TCP + libp2p bridge
+│       │   ├── dht.rs          # Sharded Kademlia DHT client
+│       │   └── gossip.rs       # GossipSub message propagation
+│       └── cloak_protocol/
+│           ├── mod.rs          # State machine coordinator
+│           ├── address.rs      # .cloak encoding/validation
+│           ├── descriptor.rs   # Signed descriptor assembly & Merkle proofs
+│           ├── circuit.rs      # Adaptive hop builder (2-5 hops)
+│           ├── rendezvous.rs   # Stateless RP handler & cookie matching
+│           ├── capability.rs   # Auth token & ZK proof verification
+│           └── traffic.rs      # Fixed-cell padding & cover flow injection
+│
+├── orchestrator/               # Python Layer (CLI, DevOps, Analytics)
+│   ├── pyproject.toml          # Poetry dependency manifest
+│   ├── poetry.lock
+│   ├── src/
+│   │   └── cloakcli/
+│   │       ├── __init__.py
+│   │       ├── main.py         # CLI entrypoint (Typer)
+│   │       ├── node_manager.py # Process lifecycle & health checks
+│   │       ├── dht_seed.py     # Descriptor sharding & DHT bootstrap
+│   │       └── auth.py         # Capability token generator
+│   └── tests/
+│       ├── __init__.py
+│       ├── test_protocol.py    # Cross-language contract validation
+│       └── test_traffic_sim.py # Padding & cover-flow stress tests
+│
+├── sdk/                        # TypeScript Layer (Web Client, SDK, WASM)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── src/
+│   │   ├── index.ts            # SDK exports
+│   │   ├── client.ts           # gRPC client wrapper
+│   │   ├── cloak_session.ts    # Browser-side .cloak session manager
+│   │   └── wasm_loader.ts      # Dynamic WASM module loader
+│   ├── examples/
+│   │   ├── web_ui/             # React/Svelte dashboard starter
+│   │   └── node_cli/           # Server-side TS script example
+│   └── tests/
+│       └── session.test.ts
+│
+├── wasm/                       # Compiled WASM artifacts & bindgen configs
+│   ├── Cargo.toml
+│   └── src/lib.rs              # Rust->WASM bindings (wasm-bindgen)
+│
+├── deploy/                     # Infrastructure & CI/CD
+│   ├── docker/
+│   │   ├── core.Dockerfile
+│   │   └── orchestrator.Dockerfile
+│   ├── docker-compose.yml      # Local 3-node testnet
+│   └── github/
+│       └── workflows/
+│           └── ci.yml          # Lint, test, cross-compile pipeline
+│
+└── docs/                       # Specifications & Guides
+    ├── PROTOCOL.md
+    ├── THREAT_MODEL.md
+    └── DEPLOYMENT_GUIDE.md
+
+================================================================================
+SECTION 2: .CLOAK PROTOCOL SPECIFICATION (ENHANCED ONION SERVICES)
+================================================================================
+
+ADDRESS FORMAT:
+  <v3>.<base32(identity_pubkey + checksum)>.cloak
+  Example: cloak1qy8x3m7n2p5v9k4w6j1r0h8t2f4d.cloak
+  Components: Version prefix (1B) + Ed25519 pubkey (32B) + Bech32 checksum (4B)
+
+CRYPTOGRAPHIC FOUNDATION:
+  Identity: Ed25519 (long-term signing & address derivation)
+  Key Exchange: X25519 + Kyber-768 (hybrid PQ-ready)
+  Encryption: ChaCha20-Poly1305 (payload confidentiality)
+  Handshake: Noise_XX_25519_ChaChaPoly_BLAKE2s (extended, zero-RTT capable)
+  Descriptors: Ed25519-SHA512 + Merkle Root (verifiable, tamper-evident)
+
+PROTOCOL FLOW (9 ACTS):
+
+  Act 1: Service Registers Introduction Points (IPs)
+    - Selects 3-5 IPs via reputation-weighted relay pool
+    - Establishes adaptive-hop circuits (2-5 hops based on threat model)
+    - IPs rotated every 15 mins or 100 sessions
+
+  Act 2: Service Publishes Signed Descriptor
+    - Descriptor contains: IP list, auth policies, hybrid PQ keys, timestamp, Merkle root
+    - Signed with .cloak identity private key
+    - Published to Cloak-DHT (sharded Kademlia) via anonymized circuit
+
+  Act 3: Client Obtains .cloak Address
+    - Shared out-of-band, via directory, QR, DID, or decentralized naming
+
+  Act 4: Client Fetches Descriptor from DHT
+    - Routes query through client-side adaptive circuit
+    - DHT returns descriptor + Merkle storage proof
+    - Client verifies proof integrity (no stale/fake descriptors)
+
+  Act 5: Client Verifies Descriptor & Authenticates Service
+    - Verifies Ed25519 signature against .cloak address pubkey
+    - Validates timestamp/nonce (replay protection)
+    - Checks auth policy (public, capability-required, ZK-gated)
+
+  Act 6: Client Establishes Rendezvous Point (RP)
+    - Selects RP from reputation-weighted pool
+    - Builds client-side circuit (default 3 hops)
+    - Generates rendezvous_cookie (32B random + ephemeral X25519 pubkey)
+    - RP stores stateless token (encrypted cookie + circuit ID only)
+
+  Act 7: Client Introduces Itself to Service
+    - Sends INTRODUCE1 to chosen IP containing RP address, cookie, capability token
+    - IP forwards payload to Service via its circuit
+
+  Act 8: Service Validates & Connects to RP
+    - Decrypts & verifies capability/token
+    - Establishes service-side circuit to RP (default 3 hops, independent from client)
+    - Sends INTRODUCE2 with cookie + session key material
+
+  Act 9: Rendezvous & End-to-End Session
+    - RP matches cookies, switches to blind relay mode
+    - Full session runs over 6 adaptive hops (3 client + 3 service)
+    - Traffic padded to fixed-size cells (256B/1KB)
+    - Cover traffic injected during idle periods
+    - Session keys rotated every 10K cells or 5 minutes
+
+KEY FEATURES BEYOND TOR:
+  - DHT Storage: Sharded, Merkle-verifiable Kademlia replaces centralized directories
+  - IP Rotation: Dynamic (time/session-based) + reputation weighting
+  - Circuit Length: Adaptive (2-5 hops) based on threat model & latency
+  - Client Auth: Capability tokens + ZK proofs + policy-driven access
+  - Cryptography: Hybrid PQ (X25519 + Kyber-768) ready
+  - RP State: Stateless relay mode prevents session hijacking
+  - Traffic Analysis: Fixed-cell padding + cover flows + jitter injection
+  - Reputation: Weighted relay selection + Sybil resistance at protocol level
+
+THREAT MODEL & MITIGATIONS:
+  Traffic Correlation -> 6 independent hops + adaptive routing + cover flows
+  Descriptor Poisoning -> Merkle-proof DHT + signature verification
+  Relay Compromise -> Stateless RP + reputation weighting + no long-term IP binding
+  Sybil Attacks -> Stake-backed trust graphs + PoW puzzle fallback
+  Post-Quantum Break -> Hybrid X25519+Kyber-768 key exchange
+  Timing/Size Analysis -> Fixed-cell padding, jitter injection, idle cover traffic
+  Client Impersonation -> Capability tokens + ZK-proof optional auth
+
+================================================================================
+SECTION 3: INITIALIZATION STEPS (RUST, PYTHON, TYPESCRIPT)
+================================================================================
+
+PREREQUISITES:
+  - Rust: rustup (>=1.70)
+  - Python: python3 (>=3.10), pip, poetry
+  - Node.js: npm (>=18)
+  - System: protoc (>=3.20), just (optional but recommended)
+
+STEP 1: INITIALIZE RUST WORKSPACE
+--------------------------------------------------------------------------------
+1. Create root directory & workspace manifest
+   mkdir cloakmesh && cd cloakmesh
+   cat > Cargo.toml << 'EOF'
+   [workspace]
+   members = ["core", "wasm"]
+   resolver = "2"
+   EOF
+
+2. Create core library crate
+   cargo new core --lib
+   cd core
+   cat > Cargo.toml << 'EOF'
+   [package]
+   name = "cloakmesh-core"
+   version = "0.1.0"
+   edition = "2021"
+
+   [dependencies]
+   tokio = { version = "1.35", features = ["full"] }
+   tokio-stream = "0.1"
+   tonic = "0.11"
+   prost = "0.12"
+   ed25519-dalek = { version = "2.0", features = ["rand_core"] }
+   x25519-dalek = "2.0"
+   rand = "0.8"
+   base64 = "0.21"
+   serde = { version = "1.0", features = ["derive"] }
+   hex = "0.4"
+   tracing = "0.1"
+   tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+   anyhow = "1.0"
+
+   [build-dependencies]
+   tonic-build = "0.11"
+   EOF
+
+3. Create build script
+   cat > build.rs << 'EOF'
+   fn main() -> Result<(), Box<dyn std::error::Error>> {
+       tonic_build::compile_protos("../proto/cloakmesh.proto")?;
+       tonic_build::compile_protos("../proto/cloak_service.proto")?;
+       println!("cargo:rerun-if-changed=../proto/");
+       Ok(())
+   }
+   EOF
+
+4. Install protoc (if missing)
+   # Ubuntu/Debian: sudo apt install protobuf-compiler
+   # macOS: brew install protobuf
+   # Windows: choco install protoc
+
+STEP 2: INITIALIZE PYTHON ORCHESTRATOR
+--------------------------------------------------------------------------------
+1. Create directory & poetry project
+   mkdir -p orchestrator/src/cloakcli orchestrator/tests
+   cd orchestrator
+   poetry init --no-interaction \
+     --name cloakmesh-orchestrator \
+     --version 0.1.0 \
+     --description "CloakMesh node orchestration & CLI" \
+     --author "CloakMesh Contributors"
+
+2. Add dependencies
+   poetry add grpcio grpcio-tools typer rich pydantic pandas
+   poetry add --dev pytest pytest-asyncio ruff mypy
+
+3. Create pyproject.toml (if not auto-generated)
+   [tool.poetry]
+   name = "cloakmesh-orchestrator"
+   version = "0.1.0"
+   description = "CloakMesh CLI & node manager"
+   authors = ["CloakMesh Contributors"]
+   
+   [tool.poetry.dependencies]
+   python = "^3.10"
+   grpcio = "^1.60"
+   grpcio-tools = "^1.60"
+   typer = "^0.9"
+   rich = "^13.7"
+   pydantic = "^2.5"
+   
+   [tool.poetry.scripts]
+   cloakcli = "cloakcli.main:app"
+
+   [tool.ruff]
+   line-length = 88
+   target-version = "py310"
+
+4. Install & verify
+   poetry install
+   poetry run cloakcli --help
+
+STEP 3: INITIALIZE TYPESCRIPT SDK
+--------------------------------------------------------------------------------
+1. Create directory & npm project
+   mkdir -p sdk/src sdk/examples/web_ui sdk/tests
+   cd sdk
+   npm init -y
+
+2. Install dependencies
+   npm install @grpc/grpc-js @grpc/proto-loader zod
+   npm install --save-dev typescript ts-node jest @types/jest jest-environment-node
+
+3. Create tsconfig.json
+   npx tsc --init
+   # Edit tsconfig.json to include:
+   {
+     "compilerOptions": {
+       "target": "ES2020",
+       "module": "commonjs",
+       "lib": ["ES2020", "DOM"],
+       "outDir": "./dist",
+       "rootDir": "./src",
+       "strict": true,
+       "esModuleInterop": true,
+       "declaration": true,
+       "sourceMap": true
+     },
+     "include": ["src/**/*.ts"],
+     "exclude": ["node_modules", "dist", "tests"]
+   }
+
+4. Add build/test scripts to package.json
+   "scripts": {
+     "build": "tsc",
+     "dev": "ts-node src/index.ts",
+     "test": "jest",
+     "lint": "tsc --noEmit"
+   }
+
+5. Install & verify
+   npm install
+   npm run build
+
+STEP 4: UNIFIED WORKFLOW (JUSTFILE)
+--------------------------------------------------------------------------------
+1. Create Justfile in project root
+   cat > Justfile << 'EOF'
+   # CloakMesh Unified Build Runner
+   set shell := ["bash", "-c"]
+
+   install-deps:
+     cd core && cargo build
+     cd orchestrator && poetry install
+     cd sdk && npm install
+
+   proto-gen:
+     mkdir -p core/src/proto orchestrator/src/proto sdk/src/proto
+     protoc --proto_path=../proto \
+       --rust_out=core/src/proto \
+       --python_out=orchestrator/src/proto \
+       --grpc_python_out=orchestrator/src/proto \
+       --js_out=import_style=commonjs,binary:sdk/src/proto \
+       --grpc-web_out=import_style=commonjs+dts,mode=grpcwebtext:sdk/src/proto \
+       ../proto/*.proto
+
+   build-all:
+     cd core && cargo build --release
+     cd orchestrator && poetry build
+     cd sdk && npm run build
+
+   test-all:
+     cd core && cargo test
+     cd orchestrator && poetry run pytest
+     cd sdk && npm run test
+
+   run-node:
+     cd core && cargo run -- --port 4001
+   EOF
+
+2. Make executable (if on Linux/macOS)
+   chmod +x Justfile
+
+STEP 5: VERIFY SETUP
+--------------------------------------------------------------------------------
+   just install-deps
+   just build-all
+   just test-all
+   
+   # Expected output: All crates compile, Python tests pass, TS builds successfully.
+   # Your workspace is ready for protocol implementation.
+
+================================================================================
+NOTES & BEST PRACTICES
+================================================================================
+- Always regenerate bindings after editing .proto files: just proto-gen
+- Keep cryptography isolated in core/cloak_protocol/crypto.rs
+- Never process raw network buffers in Python/TS; use gRPC/Protobuf contracts
+- Use just run-node to spin up the first Rust peer
+- Report security findings to security@cloakmesh.network (PGP verified)
+- See docs/THREAT_MODEL.md for operational security guidelines
+
+================================================================================
+END OF DOCUMENT
+================================================================================

@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  node-alpha:
+    build:
+      context: ..
+      dockerfile: deploy/docker/core.Dockerfile
+    ports: ["4001:4001"]
+    environment:
+      CLOAK_NODE_ID: alpha
+      CLOAK_PORT: "4001"
+      CLOAK_BOOTSTRAP: ""
+    volumes:
+      - alpha-data:/data
+
+  node-beta:
+    build:
+      context: ..
+      dockerfile: deploy/docker/core.Dockerfile
+    ports: ["4002:4002"]
+    environment:
+      CLOAK_NODE_ID: beta
+      CLOAK_PORT: "4002"
+      CLOAK_BOOTSTRAP: "node-alpha:4001"
+    depends_on: [node-alpha]
+    volumes:
+      - beta-data:/data
+
+  node-gamma:
+    build:
+      context: ..
+      dockerfile: deploy/docker/core.Dockerfile
+    ports: ["4003:4003"]
+    environment:
+      CLOAK_NODE_ID: gamma
+      CLOAK_PORT: "4003"
+      CLOAK_BOOTSTRAP: "node-alpha:4001"
+    depends_on: [node-alpha]
+    volumes:
+      - gamma-data:/data
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: deploy/docker/orchestrator.Dockerfile
+    depends_on: [node-alpha]
+    command: ["cloakcli", "node", "status", "--host", "node-alpha", "--port", "4001"]
+
+volumes:
+  alpha-data:
+  beta-data:
+  gamma-data:
