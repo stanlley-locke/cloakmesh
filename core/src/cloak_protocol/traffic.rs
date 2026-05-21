@@ -11,19 +11,19 @@ use crate::errors::{CloakError, CloakResult};
 
 // ── Cell sizes ───────────────────────────────────────────────────────────────
 
-pub const CELL_256B: usize = 256;
+pub const CELL_514B: usize = 514;
 pub const CELL_1KB: usize = 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CellSize {
-    Bytes256,
+    Bytes514,
     Bytes1K,
 }
 
 impl CellSize {
     pub fn bytes(self) -> usize {
         match self {
-            CellSize::Bytes256 => CELL_256B,
+            CellSize::Bytes514 => CELL_514B,
             CellSize::Bytes1K => CELL_1KB,
         }
     }
@@ -178,14 +178,14 @@ mod tests {
     use super::*;
 
     fn engine() -> TrafficEngine {
-        TrafficEngine::new(CellSize::Bytes256, 1, 50, true)
+        TrafficEngine::new(CellSize::Bytes514, 1, 50, true)
     }
 
     #[test]
     fn pad_produces_correct_size() {
         let e = engine();
         let cell = e.pad(b"hello world").unwrap();
-        assert_eq!(cell.bytes.len(), CELL_256B);
+        assert_eq!(cell.bytes.len(), CELL_514B);
         assert_eq!(&cell.bytes[..11], b"hello world");
         assert_eq!(cell.kind, CellKind::Data);
     }
@@ -194,13 +194,13 @@ mod tests {
     fn pad_empty_payload() {
         let e = engine();
         let cell = e.pad(b"").unwrap();
-        assert_eq!(cell.bytes.len(), CELL_256B);
+        assert_eq!(cell.bytes.len(), CELL_514B);
     }
 
     #[test]
     fn pad_exact_size_payload() {
         let e = engine();
-        let payload = vec![0xABu8; CELL_256B];
+        let payload = vec![0xABu8; CELL_514B];
         let cell = e.pad(&payload).unwrap();
         assert_eq!(cell.bytes, payload);
     }
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn oversized_payload_rejected() {
         let e = engine();
-        let payload = vec![0u8; CELL_256B + 1];
+        let payload = vec![0u8; CELL_514B + 1];
         assert!(e.pad(&payload).is_err());
     }
 
@@ -216,7 +216,7 @@ mod tests {
     fn cover_cell_correct_size() {
         let e = engine();
         let cell = e.cover_cell();
-        assert_eq!(cell.bytes.len(), CELL_256B);
+        assert_eq!(cell.bytes.len(), CELL_514B);
         assert_eq!(cell.kind, CellKind::Cover);
     }
 
@@ -224,14 +224,14 @@ mod tests {
     fn padding_bytes_are_random_not_zero() {
         let e = engine();
         let cell = e.pad(b"x").unwrap();
-        // With overwhelming probability, 255 random bytes are not all zero
+        // With overwhelming probability, 513 random bytes are not all zero
         let all_zero = cell.bytes[1..].iter().all(|&b| b == 0);
         assert!(!all_zero, "padding should be random, not zero");
     }
 
     #[test]
     fn cover_flow_scheduler_triggers_after_idle() {
-        let e = TrafficEngine::new(CellSize::Bytes256, 1, 0, true);
+        let e = TrafficEngine::new(CellSize::Bytes514, 1, 0, true);
         let mut sched = CoverFlowScheduler::new(e);
         sched.record_data_cell(0);
         // 999ms idle — not yet
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn disabled_engine_no_cover_cells() {
-        let e = TrafficEngine::new(CellSize::Bytes256, 10, 50, false);
+        let e = TrafficEngine::new(CellSize::Bytes514, 10, 50, false);
         let sched = CoverFlowScheduler::new(e);
         assert!(sched.tick(99999).is_empty());
     }

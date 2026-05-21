@@ -9,6 +9,8 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, instrument, warn, debug};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 use crate::errors::{CloakError, CloakResult};
 use crate::routing::circuit::CircuitManager;
@@ -16,37 +18,42 @@ use crate::routing::circuit::CircuitManager;
 /// Manages local-to-mesh and mesh-to-local traffic bridging.
 pub struct MeshBridge {
     circuit_manager: Arc<CircuitManager>,
+    hosted_sites: RwLock<HashMap<String, u16>>,
 }
 
 impl MeshBridge {
     pub fn new(circuit_manager: Arc<CircuitManager>) -> Self {
-        Self { circuit_manager }
+        Self { 
+            circuit_manager,
+            hosted_sites: RwLock::new(HashMap::new()),
+        }
     }
 
     /// Start hosting a local service on a .cloak address.
     #[instrument(skip(self))]
     pub async fn host_service(&self, local_port: u16, cloak_address: &str) -> CloakResult<()> {
         info!(port = local_port, addr = %cloak_address, "Hosting service on CloakMesh");
+        self.hosted_sites.write().await.insert(cloak_address.to_string(), local_port);
         Ok(())
     }
 
     /// Start a local SOCKS5 proxy to "visit" .cloak addresses.
     #[instrument(skip(self))]
-    pub async fn start_client_proxy(&self, proxy_port: u16) -> CloakResult<()> {
+    pub async fn start_client_proxy(self: Arc<Self>, proxy_port: u16) -> CloakResult<()> {
         let addr = format!("127.0.0.1:{}", proxy_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| CloakError::Other(anyhow::anyhow!(e)))?;
         
         info!(addr = %addr, "SOCKS5 Proxy started. Visit .cloak addresses via this gateway.");
 
-        let mgr = self.circuit_manager.clone();
+        let bridge = self.clone();
         tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((mut stream, peer_addr)) => {
                         debug!(peer = %peer_addr, "New incoming SOCKS5 connection");
-                        let mgr_inner = mgr.clone();
+                        let bridge_inner = bridge.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = Self::handle_socks5(&mut stream, mgr_inner).await {
+                            if let Err(e) = bridge_inner.handle_socks5(&mut stream).await {
                                 warn!(peer = %peer_addr, error = %e, "SOCKS5 session failed");
                             }
                         });
@@ -60,7 +67,7 @@ impl MeshBridge {
     }
 
     /// Implements RFC 1928 SOCKS5 Handshake and Request parsing.
-    async fn handle_socks5(stream: &mut TcpStream, mgr: Arc<CircuitManager>) -> CloakResult<()> {
+    async fn handle_socks5(&self, stream: &mut TcpStream) -> CloakResult<()> {
         // 1. Negotiation
         let mut header = [0u8; 2];
         stream.read_exact(&mut header).await.map_err(|_| CloakError::ConnectionClosed)?;
@@ -107,7 +114,7 @@ impl MeshBridge {
         info!(target = %address, "SOCKS5 CONNECT request received");
 
         // 3. Select an onion circuit and simulate connection
-        let circuit = mgr.select_random_circuit().await
+        let circuit = self.circuit_manager.select_random_circuit().await
             .ok_or_else(|| CloakError::InsufficientRelays { need: 1, have: 0 })?;
         
         debug!(circuit = %circuit.id, "Tunneling proxy traffic through circuit");
@@ -118,13 +125,30 @@ impl MeshBridge {
         response.extend_from_slice(&[0, 0]);       // BND.PORT
         stream.write_all(&response).await.map_err(|_| CloakError::ConnectionClosed)?;
 
-        // 5. Transfer data (Mocked HTTP response for demo)
+        // 5. Transfer data (Actually proxy if hosted locally for demo)
         if address.ends_with(".cloak") {
-            let msg = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nWelcome to CloakMesh!\nTarget Address: {}\nTunnel Circuit: {}\n",
-                address, circuit.id
-            );
-            stream.write_all(msg.as_bytes()).await.map_err(|_| CloakError::ConnectionClosed)?;
+            let guard = self.hosted_sites.read().await;
+            if let Some(&local_port) = guard.get(&address) {
+                // Address is hosted on this node! We can actually proxy the traffic.
+                drop(guard); // release lock
+                match TcpStream::connect(format!("127.0.0.1:{}", local_port)).await {
+                    Ok(mut target_stream) => {
+                        info!("Proxying traffic to local hosted site at 127.0.0.1:{}", local_port);
+                        let _ = tokio::io::copy_bidirectional(stream, &mut target_stream).await;
+                    }
+                    Err(e) => {
+                        warn!("Failed to connect to local hosted site: {}", e);
+                    }
+                }
+            } else {
+                drop(guard);
+                // Simulated connection for remote .cloak addresses not hosted locally
+                let msg = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nWelcome to CloakMesh!\nTarget Address: {}\nTunnel Circuit: {}\n",
+                    address, circuit.id
+                );
+                stream.write_all(msg.as_bytes()).await.map_err(|_| CloakError::ConnectionClosed)?;
+            }
         } else {
             stream.write_all(b"HTTP/1.1 403 Forbidden\r\n\r\nOnly .cloak addresses are allowed through this gateway.\n").await
                 .map_err(|_| CloakError::ConnectionClosed)?;

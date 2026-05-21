@@ -1,136 +1,140 @@
-# CloakMesh: Comprehensive Operations & Testing Manual
+# CloakMesh: Master Operations & Testing Manual (v5.0 - Final Milestone)
 
-This manual provides a strict, step-by-step procedure to initialize, host, and interact with the CloakMesh network. Follow these steps in order to exercise the full system, including DHT management, capability-gated access, and anonymous browsing.
+This is the definitive guide to exercising the entire CloakMesh ecosystem, from the core cryptographic engine to the custom Mullvad-based privacy browser.
 
 ---
 
-## Prerequisites & Environment Prep
+## Part 1: Environment Synchronization
 
-Before starting, ensure all components are built and dependencies are in sync.
+Ensure your system is ready for the high-performance polyglot build.
 
-1.  **Terminal 1: Bootstrap Everything**
+1.  **Open Terminal A: The Builder**
     ```bash
-    # From the project root
+    # 1. Install all polyglot dependencies
     just bootstrap
+
+    # 2. Generate synchronized Protobuf bindings
     just proto-gen
-    cd core && cargo build
+
+    # 3. Build the core Rust node in release mode
+    cd core && cargo build --release
     ```
 
 ---
 
-## Step 1: Start the Core Network Node
+## Part 2: Hosting a Mesh Service (.cloak Site)
 
-The core node acts as your local gateway to the mesh. It handles identity, encryption, and the proxy bridge.
+This procedure demonstrates **Programmatic Onion Service Provisioning** and **Decentralized Discovery**.
 
-1.  **Terminal 1: Run Node**
+1.  **Terminal B: Start Local Site**
     ```bash
-    cd core
-    # We use a specific node ID for consistency in this guide
-    cargo run -- --port 4001 --id demo-gateway
+    # Create a real directory for your mesh site
+    mkdir -p ~/mesh-site
+    echo "<html><body><h1>CloakMesh Anonymous Node</h1><p>Metadata-resistant content.</p></body></html>" > ~/mesh-site/index.html
+
+    # Start a local server (e.g., Python)
+    python3 -m http.server 8080 --directory ~/mesh-site
     ```
-2.  **Observe the Logs:**
-    *   Find the `cloak_address` in the logs (e.g., `ahqw6...cloak`).
-    *   Confirm `gRPC server starting, addr: 0.0.0.0:4001`.
-    *   Confirm `SOCKS5 Proxy started ... addr: 127.0.0.1:9050`.
 
----
+2.  **Terminal A: Start your Gateway Node**
+    ```bash
+    ./target/release/cloakmesh --port 4001 --id main-gateway
+    ```
+    *   **CRITICAL:** Copy your `.cloak` address from the logs (e.g., `ahqw6...cloak`).
 
-## Step 2: Secure Discovery (DHT Management)
-
-In this step, we will register a "site" on the DHT so other nodes can find it.
-
-1.  **Terminal 2: Publish Site Descriptor**
+3.  **Terminal C: Configure Hosting**
     ```bash
     cd orchestrator
-    # Use the address found in Step 1. logs
-    poetry run cloakcli dht publish <YOUR_CLOAK_ADDRESS>
-    ```
-    *   *Expected:* `SUCCESS: Descriptor for <ADDR> published successfully`.
+    # Map your .cloak identity to the local port 8080
+    poetry run cloakcli node host <YOUR_ADDR> 8080
 
-2.  **Terminal 2: Fetch and Verify Site**
-    ```bash
-    poetry run cloakcli dht fetch <YOUR_CLOAK_ADDRESS>
-    ```
-    *   *Expected:* The CLI will display the public key and version found in the DHT.
-
----
-
-## Step 3: Capability-Gated Access
-
-Privileged actions require a signed token. We will issue one and verify it.
-
-1.  **Terminal 2: Issue a 'publish' Token**
-    ```bash
-    poetry run cloakcli auth issue <YOUR_CLOAK_ADDRESS> --scope "publish" --ttl 3600
-    ```
-2.  **Verify the Token via Core Node:**
-    *   (Note: The core currently verifies tokens internally during publication. To test the service explicitly):
-    ```bash
-    # Implement a small verification check via SDK (see Step 5)
+    # Publish your descriptor to the global DHT so others can find you
+    poetry run cloakcli dht publish <YOUR_ADDR>
     ```
 
 ---
 
-## Step 4: Visiting .cloak Addresses (Mesh Proxy)
+## Part 3: Anonymous Browsing & SOCKS5 Interception
 
-This is the ultimate test: using a standard tool (`curl`) to "visit" an anonymous address via the CloakMesh circuits.
+Exercise **Three-Hop Circuit Architecture** and **Remote DNS Resolution**.
 
-1.  **Terminal 3: Browse the Mesh**
+1.  **Terminal D: The Client (Browser/Curl)**
     ```bash
-    # We tell curl to use our local proxy as a SOCKS5 gateway
-    curl -v -x socks5h://127.0.0.1:9050 http://<YOUR_CLOAK_ADDRESS>/index.html
+    # Visit your site through the 514-byte cell-framed onion tunnels
+    curl -v -x socks5h://127.0.0.1:9050 http://<YOUR_ADDR>/index.html
     ```
-2.  **Observe the Interaction:**
-    *   **Terminal 1 (Node):** You will see `New proxy connection` and `Tunneling proxy traffic through circuit`.
-    *   **Terminal 3 (Curl):** You will receive a mock `HTTP 200 OK` response: *"Welcome to CloakMesh! This site is hosted on a .cloak address."*
+    *   **Success Verification:** You should see the HTML content of your index.html file.
 
 ---
 
-## Step 5: Exercising Structured Error Codes
+## Part 4: Secure Communication (Double Ratchet Chat)
 
-Force the system to fail to verify the robustness of the error reporting.
+Demonstrate **Asynchronous Mailboxes** and **Peer-to-Peer Communication**.
 
-1.  **Test Case: Invalid Format (Code 2001)**
+1.  **Terminal C: Start Chat Listener**
     ```bash
-    cd orchestrator
-    poetry run cloakcli dht fetch "not-an-address"
-    ```
-    *   *Output Detail:* `[2001] address: invalid format — missing .cloak suffix`.
-
-2.  **Test Case: Address/Pubkey Mismatch (Code 5000)**
-    ```bash
-    # Try to publish for an address using a mismatched key (simulated in CLI)
-    poetry run cloakcli dht publish some-other-node.cloak
-    ```
-    *   *Output Detail:* `status = StatusCode.UNAUTHENTICATED, details = "Address/Pubkey mismatch"`.
-
----
-
-## Step 6: Automated Multi-Language Verification
-
-Run the full validation suite to ensure parity between all implementations.
-
-1.  **Terminal 2: Python Tests**
-    ```bash
-    cd orchestrator
-    poetry run pytest
-    poetry run python tests/smoke_proto.py
+    poetry run cloakcli chat listen
     ```
 
-2.  **Terminal 3: TypeScript SDK Tests**
+2.  **Terminal D: Send Secure Message**
     ```bash
-    cd sdk
-    npx ts-node src/smoke_test.ts
+    # This message is encrypted via the Double Ratchet protocol
+    poetry run cloakcli chat send "Encrypted update via onion mesh." --sender "RelayNode"
+    ```
+
+3.  **Terminal C: Retrieve History**
+    ```bash
+    poetry run cloakcli chat history
     ```
 
 ---
 
-## Step 7: Cleaning Up
+## Part 5: Encrypted File Sharing
 
-1.  **Stop Node:** Press `Ctrl+C` in Terminal 1.
-2.  **Verify Port Release:**
+Exercise **Fixed-Size Cell Framing** and **Metadata Stripping**.
+
+1.  **Terminal C: Receive Mode**
     ```bash
-    netstat -tulpn | grep 4001
+    poetry run cloakcli file receive
     ```
+
+2.  **Terminal D: Share File**
+    ```bash
+    echo "Confidential Mesh Data" > mesh_data.bin
+    poetry run cloakcli file share mesh_data.bin <YOUR_ADDR>
+    ```
+
+3.  **Terminal C: Verify Received Files**
+    ```bash
+    poetry run cloakcli file list
+    ```
+
+---
+
+## Part 6: Custom Privacy Browser (CloakBrowser)
+
+Testing the CloakBrowser fork configuration.
+
+1.  **Inspect Configuration:**
+    *   Verify `cloak-browser/browser/app/profile/05-custom-network.js` for `network.proxy.socks_port 9050`.
+2.  **Verify TLD Hook:**
+    *   Inspect `cloak-browser/netwerk/dns/nsEffectiveTLDService.cpp` for `.cloak` and `.onion` overrides.
+3.  **Build (Long Process):**
+    ```bash
+    cd cloak-browser
+    # Ensure dependencies are installed (see TESTING_GUIDE_ADVANCED.md Step 1)
+    ./mach build
+    ./mach run
+    ```
+
+---
+
+## Part 7: Verifying Advanced Privacy Features
+
+1.  **Cell Framing (514B):** `cd core && cargo test traffic`
+2.  **Reputation Scoring:** `poetry run cloakcli node circuits`
+3.  **DHT Lookup:** `poetry run cloakcli dht fetch <ADDR>`
+
+---
 
 "Privacy isn't a feature. It's a foundation."

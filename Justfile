@@ -25,8 +25,13 @@ proto-gen:
     echo "Rust bindings generated via build.rs on cargo build"
 
 # Build all components
-build-all:
+build-all: build-core build-wasm
+
+build-core:
     cd core && cargo build --release
+
+build-wasm:
+    cd wasm && wasm-pack build --target web --out-dir web/pkg
     cd wasm && cargo build
     cd orchestrator && poetry build
     cd sdk && npm run build

@@ -11,6 +11,8 @@ use tracing::debug;
 
 use crate::errors::CloakResult;
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 /// Size of a Kademlia node ID or key (32 bytes / 256 bits for SHA-256 / Ed25519).
 pub const KEY_LEN: usize = 32;
 
@@ -18,7 +20,7 @@ pub const KEY_LEN: usize = 32;
 pub const K_VALUE: usize = 20;
 
 /// A 256-bit identifier used for both Node IDs and Storage Keys.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Zeroize, ZeroizeOnDrop)]
 pub struct DhtKey(pub [u8; KEY_LEN]);
 
 impl DhtKey {
@@ -131,7 +133,16 @@ impl RoutingTable {
 /// The local DHT storage for descriptors.
 pub struct DhtStorage {
     // Map of Key -> (Value, Expiry)
-    store: HashMap<DhtKey, (Vec<u8>, tokio::time::Instant)>,
+    // Values are wrapped in ZeroizeWrapper to ensure Volatile RAM Storage Policy
+    store: HashMap<DhtKey, (Arc<ZeroizeWrapper>, tokio::time::Instant)>,
+}
+
+/// Helper to ensure Vec<u8> is zeroed on drop
+pub struct ZeroizeWrapper(pub Vec<u8>);
+impl Drop for ZeroizeWrapper {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
 }
 
 impl DhtStorage {
@@ -142,13 +153,13 @@ impl DhtStorage {
     }
 
     pub fn insert(&mut self, key: DhtKey, value: Vec<u8>, ttl: Duration) {
-        self.store.insert(key, (value, tokio::time::Instant::now() + ttl));
+        self.store.insert(key, (Arc::new(ZeroizeWrapper(value)), tokio::time::Instant::now() + ttl));
     }
 
     pub fn get(&self, key: &DhtKey) -> Option<Vec<u8>> {
-        if let Some((val, expiry)) = self.store.get(key) {
+        if let Some((wrapper, expiry)) = self.store.get(key) {
             if tokio::time::Instant::now() < *expiry {
-                return Some(val.clone());
+                return Some(wrapper.0.clone());
             }
         }
         None
@@ -156,6 +167,7 @@ impl DhtStorage {
 
     pub fn cleanup(&mut self) {
         let now = tokio::time::Instant::now();
+        // Evicted items are automatically zeroed by ZeroizeWrapper::drop
         self.store.retain(|_, (_, expiry)| *expiry > now);
     }
 }

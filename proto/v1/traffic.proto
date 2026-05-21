@@ -2,7 +2,7 @@ syntax = "proto3";
 package cloakmesh.v1;
 
 enum CellSize {
-  CELL_256B = 0;
+  CELL_514B = 0;
   CELL_1KB  = 1;
 }
 

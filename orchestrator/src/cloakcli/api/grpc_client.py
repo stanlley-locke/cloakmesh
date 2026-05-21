@@ -43,5 +43,13 @@ class CloakGrpcClient:
             print(f"File transfer error: {e}")
             return None
 
+    def host_site(self, address: str, port: int):
+        try:
+            request = cloak_service_pb2.HostRequest(cloak_address=address, local_port=port)
+            return self.service_stub.HostSite(request)
+        except grpc.RpcError as e:
+            print(f"Host site error: {e}")
+            return None
+
     def close(self):
         self.channel.close()

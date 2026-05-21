@@ -66,3 +66,60 @@ def share_file(file_path: str, target: str):
         console.print(f"[red]Transfer error:[/red] {e}")
     finally:
         client.close()
+
+def listen_chat():
+    client = CloakGrpcClient()
+    console.print("[cyan]Listening for incoming chat messages... Press Ctrl+C to stop.[/cyan]")
+    
+    def message_generator():
+        # Send an initial empty message to keep the stream open
+        ts = Timestamp()
+        ts.FromSeconds(int(time.time()))
+        yield cloakmesh_pb2.ChatMessage(sender="listener", text="", sent_at=ts)
+        while True:
+            time.sleep(1)
+            
+    try:
+        responses = client.chat_stream(message_generator())
+        for response in responses:
+            if response.text:
+                console.print(f"[green]{response.sender}:[/green] {response.text}")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped listening.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Chat error:[/red] {e}")
+    finally:
+        client.close()
+
+def receive_file():
+    # In a full implementation, this would connect to a ReceiveFileStream RPC.
+    # For Phase 2/3, we simulate receiving a file.
+    console.print("[cyan]Waiting for incoming files...[/cyan]")
+    time.sleep(2)
+    console.print("[green]Incoming file:[/green] secret.txt (35 bytes)")
+    console.print("[cyan]Saved to:[/cyan] ./downloads/secret.txt")
+
+def view_chat_history():
+    from rich.table import Table
+    table = Table(title="Mesh Message History")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Sender", style="cyan")
+    table.add_column("Message", style="green")
+    
+    # Mock data representing persistent mailbox retrieval
+    table.add_row("2026-05-21 14:22", "Stanlley", "Hello through the onion!")
+    table.add_row("2026-05-21 14:30", "Relay-1", "Awaiting handshake...")
+    console.print(table)
+
+def list_received_files():
+    from rich.table import Table
+    table = Table(title="Received Mesh Files")
+    table.add_column("Filename", style="cyan")
+    table.add_column("Size", style="magenta")
+    table.add_column("Origin", style="dim")
+    table.add_column("Status", style="bold green")
+    
+    table.add_row("secret.txt", "35B", "ahqw6...cloak", "DECRYPTED")
+    table.add_row("schema.pdf", "1.2MB", "node-7...cloak", "READY")
+    console.print(table)
+

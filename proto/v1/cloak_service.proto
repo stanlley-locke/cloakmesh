@@ -49,12 +49,27 @@ message Introduce2 {
   bytes session_key_material = 2;
   string circuit_id = 3;
 }
-
+// Core node RPC service for managing descriptors and hosting
 service CloakService {
   rpc PublishDescriptor(CloakDescriptor) returns (PublishAck);
   rpc FetchDescriptor(DescriptorRequest) returns (CloakDescriptor);
+
+  // Circuit/Rendezvous
   rpc Introduce(Introduce1) returns (IntroduceAck);
   rpc ConnectRendezvous(Introduce2) returns (RendezvousAck);
+
+  // Hosting
+  rpc HostSite(HostRequest) returns (HostAck);
+}
+
+message HostRequest {
+  string cloak_address = 1;
+  uint32 local_port = 2;
+}
+
+message HostAck {
+  bool success = 1;
+  string message = 2;
 }
 
 message PublishAck    { bool success = 1; string message = 2; }

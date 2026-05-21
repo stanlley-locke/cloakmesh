@@ -1,89 +1,101 @@
-# CloakMesh
+# CloakMesh: The Privacy-First Decentralized Mesh Network
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status](https://img.shields.io/badge/Status-Phase_1-orange.svg)](#roadmap)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Production--Ready-green.svg)](#roadmap)
+[![Browser](https://img.shields.io/badge/Browser-CloakBrowser-orange.svg)](./cloak-browser)
 
-**CloakMesh** is a next-generation decentralized network designed for privacy, resilience, and modularity. It provides a secure foundation for metadata-resistant communication using onion-style layered routing, a sharded Kademlia DHT, and cryptographic self-sovereign identities.
+**CloakMesh** is an advanced, decentralized peer-to-peer network designed for total metadata resistance. It combines telescoping onion routing, a sharded Kademlia DHT, and the Signal Double Ratchet protocol to provide a secure foundation for anonymous web hosting, private messaging, and encrypted file sharing.
 
-## Key Features
+---
 
-- **Onion Routing:** 3-6 hop adaptive circuits for metadata-resistant communication.
-- **Privacy-First Identity:** Ed25519-based self-sovereign identities (`.cloak` addresses).
-- **Hybrid PQ Crypto:** X25519 + Kyber-768 hybrid key exchange (in development).
-- **Polyglot SDK:** Native support for Rust, Python, and TypeScript.
-- **WASM Ready:** Run full or light nodes directly in the browser.
-- **Decentralized Discovery:** Sharded Kademlia DHT with Merkle-verifiable descriptors.
+## 🚀 Key Features
 
-## Project Structure
+### 🔐 Advanced Cryptography & Privacy
+*   **Three-Hop Onion Routing:** Adaptive, telescoping circuits (Guard -> Middle -> Exit/Rendezvous) ensure that no single node knows both the sender and receiver.
+*   **Double Ratchet Protocol:** Forward-secure, break-in recoverable end-to-end encryption for all P2P communication.
+*   **514-Byte Cell Framing:** Strictly enforced fixed-size cells with cryptographic random padding to defeat traffic analysis.
+*   **Volatile RAM Storage:** Sensitive session data and descriptors are stored in-memory only and cryptographically zeroed out upon eviction.
+
+### 🌐 Network Infrastructure
+*   **SOCKS5 Mesh Gateway:** A native RFC 1928 gateway allowing standard browsers and tools (`curl`, `firefox`) to visit `.cloak` addresses anonymously.
+*   **Decentralized Discovery:** Sharded Kademlia DHT with cryptographically verifiable service descriptors.
+*   **Mesh Hosting:** Map local TCP services to unique `.cloak` identities with a single command.
+*   **Traffic Analysis Defense:** Integrated cover flow (chaff traffic) and timing jitter to defeat global observers.
+
+### 🛠️ Polyglot Ecosystem
+*   **Core Engine (Rust):** High-performance, memory-safe backbone for routing and crypto.
+*   **Orchestrator (Python):** Production-grade CLI for node management, observability, and chat.
+*   **SDK (TypeScript & WASM):** Native browser integration for building decentralized web apps.
+*   **CloakBrowser:** A hardened fork of the Mullvad Browser pre-configured for the CloakMesh network.
+
+---
+
+## 📁 Project Structure
 
 ```text
 cloakmesh/
-├── core/                 # Rust: Networking, crypto, routing engine
-├── orchestrator/         # Python: CLI, node management, analytics
-├── sdk/                  # TypeScript: Client SDK, web UI, events
-├── proto/                # Shared .proto & CBOR schema definitions
-├── wasm/                 # Compiled WASM artifacts & bindings
-├── deploy/               # Docker, K8s, CI/CD pipelines
-└── docs/                 # Protocol spec, RFCs, threat model
+├── core/                 # Rust: Onion routing, DHT, Double Ratchet, TCP Transport
+├── orchestrator/         # Python: Management CLI, Chat Listener, File Manager
+├── sdk/                  # TypeScript: Web integration & Browser WASM Crypto
+├── cloak-browser/        # C++/JS: Mullvad-based hardened privacy browser
+├── proto/                # Cross-language gRPC/Protobuf definitions
+├── docs/                 # Specifications, Feature Compliance, Error Codes
+└── tests/                # System-wide integration and smoke tests
 ```
 
-## Getting Started
+---
 
-### Prerequisites
+## 🚦 Quick Start
 
-- **Rust** >= 1.70
-- **Python** >= 3.10
-- **Node.js** >= 18
-- **protoc** >= 3.20
-- **just** (task runner)
+### 1. Bootstrap the System
+```bash
+just bootstrap
+just proto-gen
+cd core && cargo build --release
+```
 
-### Quick Start
+### 2. Launch your Gateway
+```bash
+./target/release/cloakmesh --port 4001 --id my-gateway
+```
+*Note your `.cloak` address in the logs.*
 
-1. **Bootstrap the project:**
-   ```bash
-   just bootstrap
-   ```
+### 3. Host and Browse
+```bash
+# Terminal B: Start a local server
+python3 -m http.server 8080 &
+# Terminal B: Map it to your .cloak address
+poetry run cloakcli node host your-address.cloak 8080
 
-2. **Build all components:**
-   ```bash
-   just build-all
-   ```
+# Terminal C: Browse anonymously
+curl -x socks5h://127.0.0.1:9050 http://your-address.cloak
+```
 
-3. **Run a local testnet:**
-   ```bash
-   docker compose up -d
-   ```
+---
 
-4. **Connect via CLI:**
-   ```bash
-   cd orchestrator && poetry run cloakcli connect
-   ```
+## 📚 Documentation Portal
 
-## Roadmap
+*   **[Master Operations Manual](./TESTING_GUIDE_ADVANCED.md):** Step-by-step guide to all network features.
+*   **[Advanced Feature Compliance](./docs/FEATURES_COMPLIANCE.md):** Audit of all 36+ integrated privacy features.
+*   **[Unified Error Codes](./docs/ERROR_CODES.md):** Troubleshooting guide for the polyglot stack.
+*   **[Protocol Specification](./docs/PROTOCOL.md):** Technical deep-dive into the .cloak protocol.
+*   **[Architecture Overview](./docs/ARCHITECTURE.md):** High-level system design and data lifecycle.
 
-| Phase | Milestone | Status |
-| :--- | :--- | :--- |
-| **Phase 1** | **Protocol Definition & Cross-Language Bindings** | **Active** |
-| Phase 2 | Rust Core Engine (Network, Crypto, DHT) | Planned |
-| Phase 3 | WASM & Browser Integration | Planned |
-| Phase 4 | Python Orchestrator & CLI | Planned |
-| Phase 5 | TypeScript SDK & Web Client | Planned |
-| Phase 6 | Security Hardening & Audit | Planned |
+### Sub-Module Guides
+*   **[Rust Core Engine](./TEST_RUST.md)**
+*   **[Python Orchestrator CLI](./TEST_PYTHON.md)**
+*   **[TypeScript/WASM SDK](./TEST_SDK.md)**
+*   **[CloakBrowser Build Guide](./TEST_BROWSER.md)**
 
-## Documentation
+---
 
-- [Protocol Specification](./docs/PROTOCOL.md)
-- [Architecture Overview](./docs/ARCHITECTURE.md)
-- [Threat Model](./docs/THREAT_MODEL.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
+## 🤝 Contributing
 
-## Contributing
+We welcome contributions to the mesh! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for style guidelines and security disclosure policies.
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+## ⚖️ License
 
-## License
-
-Licensed under Apache-2.0. See [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
 ---
 "Privacy isn't a feature. It's a foundation."

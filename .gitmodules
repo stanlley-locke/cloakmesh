@@ -1,0 +1,3 @@
+[submodule "cloak-browser"]
+	path = cloak-browser
+	url = https://github.com/stanlley-locke/cloak-browser.git

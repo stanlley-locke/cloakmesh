@@ -14,7 +14,7 @@ use crate::proto::v1::{
     CloakDescriptor, PublishAck, DescriptorRequest,
     Introduce1, IntroduceAck, Introduce2, RendezvousAck,
     CapabilityVerifyRequest, CapabilityVerifyResponse,
-    ChatMessage, FileChunk, TransferAck
+    ChatMessage, FileChunk, TransferAck, HostRequest, HostAck
 };
 use crate::routing::dht::{DhtNode, DhtKey};
 use crate::routing::circuit::CircuitManager;
@@ -36,14 +36,14 @@ impl CloakNode {
     pub fn new(identity_pubkey: [u8; 32]) -> Self {
         let local_id = DhtKey(identity_pubkey);
         let dht = Arc::new(DhtNode::new(local_id));
-        let circuit_manager = Arc::new(CircuitManager::new());
+        let circuit_manager = Arc::new(CircuitManager::new(5)); // Maintain a pool of 5 circuits
         let bridge = Arc::new(MeshBridge::new(circuit_manager.clone()));
         
         dht.clone().start_maintenance();
         Self { dht, circuit_manager, bridge, identity_pubkey }
     }
     
-    pub async fn start_proxy(&self, port: u16) -> CloakResult<()> {
+    pub async fn start_proxy(self: Arc<Self>, port: u16) -> CloakResult<()> {
         // Pre-build a mock circuit for the demo
         self.circuit_manager.build_circuit(3, vec![
             ("relay1".into(), "1.1.1.1".into()),
@@ -51,7 +51,7 @@ impl CloakNode {
             ("relay3".into(), "3.3.3.3".into()),
         ]).await?;
         
-        self.bridge.start_client_proxy(port).await
+        self.bridge.clone().start_client_proxy(port).await
     }
 
     /// Internal helper to verify a capability token (Use Case 3)
@@ -250,6 +250,20 @@ impl CloakService for CloakNode {
         Ok(Response::new(RendezvousAck {
             matched: true,
             circuit_id: "test-circuit".into(),
+        }))
+    }
+
+    async fn host_site(
+        &self,
+        request: Request<HostRequest>,
+    ) -> Result<Response<HostAck>, Status> {
+        let req = request.into_inner();
+        self.bridge.host_service(req.local_port as u16, &req.cloak_address).await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        
+        Ok(Response::new(HostAck {
+            success: true,
+            message: format!("Successfully hosting {} on local port {}", req.cloak_address, req.local_port),
         }))
     }
 }

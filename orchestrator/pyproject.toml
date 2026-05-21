@@ -24,7 +24,7 @@ ruff = "^0.1"
 mypy = "^1.7"
 
 [tool.poetry.scripts]
-cloakcli = "cloakcli.main:app"
+cloakcli = "cloakcli.main:cli"
 
 [tool.ruff]
 line-length = 88
