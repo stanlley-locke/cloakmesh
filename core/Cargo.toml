@@ -33,6 +33,8 @@ ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 # ChaCha20-Poly1305 AEAD
 chacha20poly1305 = "0.10"
+# Kyber-768 hybrid PQ crypto
+pqc_kyber = { version = "0.7.1", features = ["std"] }
 # BLAKE2 for Noise KDF
 blake2 = "0.10"
 # SHA-256 for address checksum & Merkle

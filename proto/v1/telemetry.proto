@@ -11,6 +11,10 @@ message NodeMetrics {
   uint64 dht_entries = 5;
   double reputation_score = 6;
   google.protobuf.Timestamp collected_at = 7;
+  string cloak_address = 8;
+  uint64 uptime_seconds = 9;
+  double cpu_usage = 10;
+  double mem_usage = 11;
 }
 
 message HealthStatus {
@@ -20,10 +24,43 @@ message HealthStatus {
   google.protobuf.Timestamp checked_at = 4;
 }
 
+message CircuitHopInfo {
+  string peer_id = 1;
+  string address = 2;
+}
+
+message CircuitInfo {
+  string id = 1;
+  repeated CircuitHopInfo hops = 2;
+  uint64 uptime_seconds = 3;
+  string status = 4;
+  double latency_ms = 5;
+}
+
+message CircuitsResponse {
+  repeated CircuitInfo circuits = 1;
+}
+
+message RelayInfo {
+  string id = 1;
+  string name = 2;
+  string address = 3;
+  string load = 4;
+  string status = 5;
+  double reputation = 6;
+  string uptime = 7;
+}
+
+message RelaysResponse {
+  repeated RelayInfo relays = 1;
+}
+
 service TelemetryService {
   rpc GetMetrics(MetricsRequest) returns (NodeMetrics);
   rpc GetHealth(HealthRequest) returns (HealthStatus);
   rpc StreamMetrics(MetricsRequest) returns (stream NodeMetrics);
+  rpc GetCircuits(MetricsRequest) returns (CircuitsResponse);
+  rpc GetRelays(MetricsRequest) returns (RelaysResponse);
 }
 
 message MetricsRequest { string node_id = 1; }

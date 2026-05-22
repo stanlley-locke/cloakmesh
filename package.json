@@ -1,0 +1,9 @@
+{
+  "name": "cloakmesh-root",
+  "private": true,
+  "scripts": {
+    "core": "PATH=/home/codespace/.cargo/bin:$PATH cargo run --manifest-path core/Cargo.toml -- --port 4001 --id node-alpha 2>&1 | tee core.log",
+    "gateway": "poetry run -C orchestrator python src/cloakcli/api/http_gateway.py 2>&1 | tee gateway.log",
+    "admin": "npm run dev --prefix cloak-admin"
+  }
+}

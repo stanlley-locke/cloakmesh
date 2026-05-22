@@ -74,18 +74,20 @@ pub const HYBRID_CT_LEN: usize = 1088;
 
 pub struct HybridKeyPair {
     pub x25519: X25519KeyPair,
-    #[allow(dead_code)]
-    kyber_sk: Zeroizing<Vec<u8>>,
-    pub kyber_pk: Vec<u8>,
+    kyber_sk: Zeroizing<[u8; 2400]>,
+    pub kyber_pk: [u8; 1184],
 }
 
 impl HybridKeyPair {
     pub fn generate() -> Self {
         let x25519 = X25519KeyPair::generate();
-        // TODO Phase 2.1: replace with real Kyber-768 keygen
-        let kyber_sk = Zeroizing::new(vec![0u8; 2400]);
-        let kyber_pk = vec![0u8; 1184];
-        Self { x25519, kyber_sk, kyber_pk }
+        let mut rng = OsRng;
+        let keys = pqc_kyber::keypair(&mut rng).expect("Kyber keygen failed");
+        Self {
+            x25519,
+            kyber_sk: Zeroizing::new(keys.secret),
+            kyber_pk: keys.public,
+        }
     }
 
     /// Serialize the combined public key: X25519 || Kyber-768 pk
@@ -108,10 +110,14 @@ impl HybridKeyPair {
         let x25519_pk: [u8; 32] = remote_combined_pk[..32].try_into().unwrap();
         let (our_eph_pub, x25519_ss) = ephemeral_dh(&x25519_pk)?;
 
-        // TODO Phase 2.1: real Kyber-768 encapsulation
-        let kyber_ct = vec![0u8; HYBRID_CT_LEN];
-        let kyber_ss = Zeroizing::new([0u8; 32]);
+        let kyber_pk: &[u8; 1184] = remote_combined_pk[32..32 + 1184].try_into().map_err(|_| {
+            CloakError::InvalidKeyMaterial("Invalid Kyber public key length".into())
+        })?;
+        let mut rng = OsRng;
+        let (kyber_ct, kyber_ss_bytes) = pqc_kyber::encapsulate(kyber_pk, &mut rng)
+            .map_err(|_| CloakError::InvalidKeyMaterial("Kyber encapsulation failed".into()))?;
 
+        let kyber_ss = Zeroizing::new(kyber_ss_bytes);
         let combined_ss = combine_secrets(&x25519_ss, &kyber_ss)?;
 
         let mut ct = our_eph_pub.to_vec();
@@ -133,8 +139,12 @@ impl HybridKeyPair {
             ));
         }
 
-        // TODO Phase 2.1: real Kyber-768 decapsulation
-        let kyber_ss = Zeroizing::new([0u8; 32]);
+        let kyber_ct: &[u8; 1088] = ciphertext[32..32 + HYBRID_CT_LEN].try_into().map_err(|_| {
+            CloakError::InvalidKeyMaterial("Invalid Kyber ciphertext length".into())
+        })?;
+        let kyber_ss_bytes = pqc_kyber::decapsulate(kyber_ct, &self.kyber_sk[..])
+            .map_err(|_| CloakError::InvalidKeyMaterial("Kyber decapsulation failed".into()))?;
+        let kyber_ss = Zeroizing::new(kyber_ss_bytes);
 
         combine_secrets(&x25519_ss, &kyber_ss)
     }

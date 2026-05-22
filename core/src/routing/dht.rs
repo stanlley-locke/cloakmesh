@@ -246,6 +246,12 @@ impl DhtNode {
     pub async fn get_local(&self, key: &DhtKey) -> CloakResult<Option<Vec<u8>>> {
         Ok(self.storage.read().await.get(key))
     }
+
+    /// List all known peers in the routing table.
+    pub async fn list_peers(&self) -> Vec<PeerInfo> {
+        let routing = self.routing.read().await;
+        routing.buckets.iter().flat_map(|b| b.peers.iter().cloned()).collect()
+    }
 }
 
 #[cfg(test)]

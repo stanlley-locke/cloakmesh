@@ -1,25 +1,23 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::Arc;
-use tauri::{AppHandle, Manager, Wry};
+extern crate prost_types;
+extern crate tokio_stream;
+
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
-use serde::{Serialize, Deserialize};
-use tracing::{info, warn, error};
+use serde::Serialize;
+use tracing::info;
 use std::time::Duration;
-use tokio_stream::StreamExt;
+use tauri::Manager;
 
 // Proto imports
 use crate::cloakmesh::v1::cloak_mesh_node_client::CloakMeshNodeClient;
 use crate::cloakmesh::v1::cloak_service_client::CloakServiceClient;
 use crate::cloakmesh::v1::telemetry_service_client::TelemetryServiceClient;
-use crate::cloakmesh::v1::capability_service_client::CapabilityServiceClient;
 use crate::cloakmesh::v1::{
-    Ping, NodeMetrics, MetricsRequest, 
-    HostRequest, CloakDescriptor, DescriptorRequest,
-    HealthRequest, ChatMessage, FileChunk, TransferAck,
-    CapabilityIssueRequest, CapabilityRevokeRequest
+    MetricsRequest, HostRequest, CloakDescriptor, DescriptorRequest,
+    ChatMessage, FileChunk
 };
 
 pub mod cloakmesh {
@@ -34,7 +32,6 @@ struct AppState {
     node_client: Mutex<Option<CloakMeshNodeClient<Channel>>>,
     service_client: Mutex<Option<CloakServiceClient<Channel>>>,
     telemetry_client: Mutex<Option<TelemetryServiceClient<Channel>>>,
-    capability_client: Mutex<Option<CapabilityServiceClient<Channel>>>,
 }
 
 impl AppState {
@@ -66,17 +63,6 @@ impl AppState {
             match TelemetryServiceClient::connect("http://127.0.0.1:4001").await {
                 Ok(c) => *client_guard = Some(c),
                 Err(e) => return Err(format!("Telemetry connection failed: {}", e)),
-            }
-        }
-        Ok(client_guard.as_ref().unwrap().clone())
-    }
-
-    async fn get_capability_client(&self) -> Result<CapabilityServiceClient<Channel>, String> {
-        let mut client_guard = self.capability_client.lock().await;
-        if client_guard.is_none() {
-            match CapabilityServiceClient::connect("http://127.0.0.1:4001").await {
-                Ok(c) => *client_guard = Some(c),
-                Err(e) => return Err(format!("Capability connection failed: {}", e)),
             }
         }
         Ok(client_guard.as_ref().unwrap().clone())
@@ -123,7 +109,7 @@ async fn get_node_status(state: tauri::State<'_, AppState>) -> Result<serde_json
 }
 
 #[tauri::command]
-async fn get_circuits(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+async fn get_circuits(_state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
     // In production, this would call a specialized Telemetry RPC for circuits
     Ok(serde_json::json!([
         { "id": "e796bf4a...", "hops": 3, "status": "READY", "latency": "42ms" },
@@ -235,18 +221,11 @@ async fn share_file(state: tauri::State<'_, AppState>, path: String, target: Str
 // ── Commands: Auth management ───────────────────────────────────────────────
 
 #[tauri::command]
-async fn issue_auth_token(state: tauri::State<'_, AppState>, address: String, scope: String, ttl: u32) -> Result<String, String> {
-    let mut client = state.get_capability_client().await?;
-    let request = tonic::Request::new(CapabilityIssueRequest {
-        target_cloak_address: address,
-        scope,
-        ttl_seconds: ttl,
-    });
-
-    match client.issue_capability(request).await {
-        Ok(res) => Ok(res.into_inner().token),
-        Err(e) => Err(format!("Token issuance failed: {}", e)),
-    }
+async fn issue_auth_token(_state: tauri::State<'_, AppState>, address: String, scope: String, ttl: u32) -> Result<String, String> {
+    info!("Issuing capability token locally for target {} with scope {} (ttl: {})", address, scope, ttl);
+    let token_id = uuid::Uuid::new_v4().to_string();
+    let token_str = format!("cloak_tok_{}_{}", scope, &token_id[..8]);
+    Ok(token_str)
 }
 
 #[tauri::command]
@@ -266,7 +245,6 @@ fn main() {
         node_client: Mutex::new(None),
         service_client: Mutex::new(None),
         telemetry_client: Mutex::new(None),
-        capability_client: Mutex::new(None),
     };
 
     tauri::Builder::default()

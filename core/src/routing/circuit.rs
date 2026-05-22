@@ -183,6 +183,12 @@ impl CircuitManager {
             }
         }
     }
+
+    /// List all active circuits in the pool.
+    pub async fn list_circuits(&self) -> Vec<Arc<Circuit>> {
+        let guard = self.circuits.read().await;
+        guard.values().cloned().collect()
+    }
 }
 
 #[cfg(test)]

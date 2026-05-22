@@ -1,4 +1,4 @@
-import { CloakClient } from '../src/client/grpc_client';
+import { CloakClient } from '../../src/client/grpc_client';
 
 describe('CloakClient', () => {
     it('should be instantiable', () => {
