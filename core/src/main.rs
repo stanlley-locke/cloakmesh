@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
     );
 
     // Initialize Node state
-    let node = Arc::new(cloakmesh_core::node::CloakNode::new(pubkey));
+    let node = Arc::new(cloakmesh_core::node::CloakNode::new(pubkey, config.node_id.clone()));
 
     let addr = format!("0.0.0.0:{}", config.listen_port).parse()?;
     info!(addr = %addr, "gRPC server starting");
@@ -104,6 +104,7 @@ async fn main() -> Result<()> {
         .add_service(cloakmesh_core::proto::v1::cloak_mesh_node_server::CloakMeshNodeServer::from_arc(node.clone()))
         .add_service(cloakmesh_core::proto::v1::cloak_service_server::CloakServiceServer::from_arc(node.clone()))
         .add_service(cloakmesh_core::proto::v1::capability_service_server::CapabilityServiceServer::from_arc(node.clone()))
+        .add_service(cloakmesh_core::proto::v1::telemetry_service_server::TelemetryServiceServer::from_arc(node.clone()))
         .serve(addr);
 
     // ── Phase 2 will add: ────────────────────────────────────────────────────

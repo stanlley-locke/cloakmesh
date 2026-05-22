@@ -122,7 +122,7 @@ impl NoiseHandshake {
             .map_err(|_| CloakError::AeadDecrypt)
     }
 
-    fn split(&self) -> CloakResult<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+    fn split(&self) -> CloakResult<crate::crypto::kdf::KeySet> {
         let k1 = hkdf_expand(&self.chaining_key, b"cloakmesh-noise-send", b"")?;
         let k2 = hkdf_expand(&self.chaining_key, b"cloakmesh-noise-recv", b"")?;
         if self.is_initiator { Ok((k1, k2)) } else { Ok((k2, k1)) }

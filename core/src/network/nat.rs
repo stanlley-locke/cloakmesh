@@ -10,6 +10,12 @@ pub struct NatEngine {
     // Configuration for clearweb interface binding
 }
 
+impl Default for NatEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NatEngine {
     pub fn new() -> Self {
         Self {}

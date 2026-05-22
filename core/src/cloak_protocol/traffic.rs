@@ -1,7 +1,9 @@
 //! Traffic analysis resistance: fixed-cell padding, cover flow, and jitter.
 //!
-//! All cells are padded to a fixed size (256B or 1KB) before transmission.
+//! All cells are padded to a fixed size (514B or 1KB) before transmission.
+//! This implements the "Fixed-Size 514-Byte Cell Framing" requirement.
 //! During idle periods, cover traffic cells are injected at a configured rate.
+
 //! Random jitter is added to each send to defeat timing correlation.
 
 use rand::{Rng, RngCore};

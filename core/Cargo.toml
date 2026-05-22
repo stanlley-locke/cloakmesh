@@ -68,6 +68,7 @@ uuid = { version = "1.6", features = ["v4"] }
 
 # Async traits
 async-trait = "0.1"
+async-stream = "0.3"
 
 # Metrics
 prometheus = "0.13"

@@ -124,7 +124,7 @@ impl CellNonce {
 
     /// Advance and return the next nonce. Returns `None` if the counter would
     /// overflow (2^64 cells — practically unreachable, but checked for safety).
-    pub fn next(&mut self) -> Option<[u8; 12]> {
+    pub fn advance_nonce(&mut self) -> Option<[u8; 12]> {
         let c = self.counter.checked_add(1)?;
         self.counter = c;
         let mut nonce = [0u8; 12];
@@ -171,7 +171,7 @@ impl HopCount {
     pub const DEFAULT: u8 = 3;
 
     pub fn new(n: u8) -> crate::errors::CloakResult<Self> {
-        if n < Self::MIN || n > Self::MAX {
+        if !(Self::MIN..=Self::MAX).contains(&n) {
             return Err(crate::errors::CloakError::ConfigInvalidValue {
                 field: "hop_count".into(),
                 reason: format!("must be {}-{}, got {}", Self::MIN, Self::MAX, n),

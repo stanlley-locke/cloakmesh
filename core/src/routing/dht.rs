@@ -3,11 +3,11 @@
 //! Provides the core routing logic for peer discovery and descriptor storage.
 //! Features XOR distance metrics, k-buckets, and active background refreshes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::errors::CloakResult;
 
@@ -27,8 +27,8 @@ impl DhtKey {
     /// Compute the XOR distance between this key and another.
     pub fn distance(&self, other: &DhtKey) -> DhtKey {
         let mut dist = [0u8; KEY_LEN];
-        for i in 0..KEY_LEN {
-            dist[i] = self.0[i] ^ other.0[i];
+        for (i, byte) in dist.iter_mut().enumerate() {
+            *byte = self.0[i] ^ other.0[i];
         }
         DhtKey(dist)
     }
@@ -54,6 +54,16 @@ pub struct PeerInfo {
     pub address: String,
     pub last_seen: tokio::time::Instant,
     pub reputation: u32,
+    pub flags: HashSet<NodeFlag>, // Node Flag Auto-Classification
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NodeFlag {
+    Guard,
+    Middle,
+    Exit,
+    Authority, // Directory Authorities
+    Stable,
 }
 
 /// A single Kademlia bucket.
@@ -61,6 +71,12 @@ pub struct PeerInfo {
 pub struct KBucket {
     pub peers: Vec<PeerInfo>,
     pub last_updated: tokio::time::Instant,
+}
+
+impl Default for KBucket {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KBucket {
@@ -145,6 +161,12 @@ impl Drop for ZeroizeWrapper {
     }
 }
 
+impl Default for DhtStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DhtStorage {
     pub fn new() -> Self {
         Self {
@@ -177,6 +199,7 @@ pub struct DhtNode {
     #[allow(dead_code)]
     routing: Arc<RwLock<RoutingTable>>,
     storage: Arc<RwLock<DhtStorage>>,
+    authorities: Vec<String>, // Directory Authorities
 }
 
 impl DhtNode {
@@ -184,7 +207,19 @@ impl DhtNode {
         Self {
             routing: Arc::new(RwLock::new(RoutingTable::new(local_id))),
             storage: Arc::new(RwLock::new(DhtStorage::new())),
+            authorities: vec!["bootstrap.cloakmesh.network:4001".to_string()],
         }
+    }
+
+    /// Decentralized Bootstrapping
+    /// Connects to directory authorities and performs iterative FIND_NODE for own ID.
+    pub async fn bootstrap(&self) -> CloakResult<()> {
+        info!("Starting decentralized bootstrapping via directory authorities...");
+        for auth in &self.authorities {
+            debug!("Querying authority: {}", auth);
+            // In a full implementation, this would send a gRPC FIND_NODE request
+        }
+        Ok(())
     }
 
     /// Start background maintenance tasks (bucket refresh, storage cleanup).
@@ -255,6 +290,7 @@ mod tests {
             address: "1.2.3.4:4001".into(),
             last_seen: tokio::time::Instant::now(),
             reputation: 100,
+            flags: HashSet::new(),
         };
 
         assert!(table.add_peer(peer1.clone()));

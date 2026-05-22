@@ -41,13 +41,15 @@ pub fn derive_key(salt: &[u8], ikm: &[u8], info: &[u8]) -> CloakResult<Zeroizing
     hkdf_expand(&*prk, info, b"")
 }
 
+pub type KeySet = (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>);
+
 /// Derive two independent 32-byte keys from one shared secret (e.g. for
 /// send/receive key split in a session).
 pub fn derive_key_pair(
     shared_secret: &[u8],
     info_a: &[u8],
     info_b: &[u8],
-) -> CloakResult<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+) -> CloakResult<KeySet> {
     let salt = b"cloakmesh-kdf-v1";
     let prk = hkdf_extract(salt, shared_secret);
     let ka = hkdf_expand(&*prk, info_a, b"")?;

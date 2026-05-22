@@ -27,7 +27,7 @@ impl Ed25519KeyPair {
 
     /// Restore from a 32-byte secret seed. The seed is consumed and zeroed.
     pub fn from_secret_bytes(mut bytes: Zeroizing<[u8; 32]>) -> Self {
-        let kp = Self { signing_key: SigningKey::from_bytes(&*bytes) };
+        let kp = Self { signing_key: SigningKey::from_bytes(&bytes) };
         bytes.zeroize();
         kp
     }

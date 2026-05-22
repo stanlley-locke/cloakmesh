@@ -14,6 +14,12 @@ pub struct GossipSubEngine {
     // In a full implementation, this would hold a libp2p Gossipsub behavior handle
 }
 
+impl Default for GossipSubEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GossipSubEngine {
     pub fn new() -> Self {
         Self {

@@ -33,7 +33,7 @@ impl SessionKey {
     }
 
     pub fn encrypt(&mut self, plaintext: &[u8], aad: &[u8]) -> CloakResult<Vec<u8>> {
-        let nonce_bytes = self.nonce.next()
+        let nonce_bytes = self.nonce.advance_nonce()
             .ok_or_else(|| CloakError::NonceExhausted)?;
         
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -58,7 +58,9 @@ impl SessionKey {
 
     pub fn rotate(&self, circuit_prefix: [u8; 4]) -> CloakResult<Self> {
         let mut next_raw = [0u8; 32];
-        for i in 0..32 { next_raw[i] = self.raw[i] ^ 0xFF; }
+        for (i, byte) in next_raw.iter_mut().enumerate() {
+            *byte = self.raw[i] ^ 0xFF;
+        }
         Self::new(next_raw, circuit_prefix, self.policy.clone())
     }
 }

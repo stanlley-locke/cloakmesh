@@ -139,6 +139,12 @@ impl Connection for TcpConnection {
 /// A robust async TCP Transport manager.
 pub struct TcpTransport {}
 
+impl Default for TcpTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TcpTransport {
     pub fn new() -> Self {
         Self {}

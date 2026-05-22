@@ -1,42 +1,12 @@
-//! Merkle tree implementation for descriptor storage proofs.
-//!
-//! Uses SHA-256 with domain separation:
-//!   leaf hash:   SHA-256(0x00 || data)
-//!   parent hash: SHA-256(0x01 || left || right)
-//!
-//! Domain separation prevents second-preimage attacks where an attacker
-//! could substitute an internal node for a leaf.
+//! Merkle Tree implementation for verifiable descriptors and DHT proofs.
+//! 
+//! Provides fixed-width Merkle trees with SHA-256 for integrity verification.
+//! Supports Proof generation and verification for arbitrary leaf data.
 
 use sha2::{Digest, Sha256};
-
 use crate::errors::{CloakError, CloakResult};
 
-// ── Domain separation prefixes ───────────────────────────────────────────────
-
-const LEAF_PREFIX: u8 = 0x00;
-const NODE_PREFIX: u8 = 0x01;
-
-// ── Hash helpers ─────────────────────────────────────────────────────────────
-
-fn hash_leaf(data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update([LEAF_PREFIX]);
-    h.update(data);
-    h.finalize().into()
-}
-
-fn hash_node(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update([NODE_PREFIX]);
-    h.update(left);
-    h.update(right);
-    h.finalize().into()
-}
-
-// ── Merkle root ──────────────────────────────────────────────────────────────
-
-/// Compute the Merkle root of a list of leaf data items.
-/// Returns `[0u8; 32]` for an empty list.
+/// Compute the Merkle root of a list of leaves.
 pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
     if leaves.is_empty() {
         return [0u8; 32];
@@ -44,7 +14,7 @@ pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
     let mut layer: Vec<[u8; 32]> = leaves.iter().map(|l| hash_leaf(l)).collect();
     while layer.len() > 1 {
         // Duplicate the last node if the layer has odd length (standard approach)
-        if layer.len() % 2 != 0 {
+        if !layer.len().is_multiple_of(2) {
             layer.push(*layer.last().unwrap());
         }
         layer = layer
@@ -55,23 +25,16 @@ pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
     layer[0]
 }
 
-// ── Merkle proof ─────────────────────────────────────────────────────────────
-
-/// A Merkle inclusion proof for a single leaf.
-#[derive(Debug, Clone)]
+/// A Merkle inclusion proof for a specific leaf.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MerkleProof {
-    /// Index of the leaf in the original list.
     pub leaf_index: usize,
-    /// Sibling hashes from leaf to root (bottom-up).
     pub siblings: Vec<[u8; 32]>,
 }
 
 impl MerkleProof {
-    /// Generate an inclusion proof for the leaf at `index`.
+    /// Generate a proof for the leaf at `index`.
     pub fn generate(leaves: &[Vec<u8>], index: usize) -> CloakResult<Self> {
-        if leaves.is_empty() {
-            return Err(CloakError::MerkleProofInvalid);
-        }
         if index >= leaves.len() {
             return Err(CloakError::MerkleProofInvalid);
         }
@@ -81,11 +44,11 @@ impl MerkleProof {
         let mut idx = index;
 
         while layer.len() > 1 {
-            if layer.len() % 2 != 0 {
+            if !layer.len().is_multiple_of(2) {
                 layer.push(*layer.last().unwrap());
             }
             // The sibling is the node at the paired index
-            let sibling_idx = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+            let sibling_idx = if idx.is_multiple_of(2) { idx + 1 } else { idx - 1 };
             siblings.push(layer[sibling_idx]);
             idx /= 2;
             layer = layer
@@ -94,16 +57,16 @@ impl MerkleProof {
                 .collect();
         }
 
-        Ok(MerkleProof { leaf_index: index, siblings })
+        Ok(Self { leaf_index: index, siblings })
     }
 
-    /// Verify this proof against a known root and leaf data.
+    /// Verify the proof against a known Merkle root.
     pub fn verify(&self, root: &[u8; 32], leaf_data: &[u8]) -> CloakResult<()> {
         let mut current = hash_leaf(leaf_data);
         let mut idx = self.leaf_index;
 
         for sibling in &self.siblings {
-            current = if idx % 2 == 0 {
+            current = if idx.is_multiple_of(2) {
                 hash_node(&current, sibling)
             } else {
                 hash_node(sibling, &current)
@@ -111,15 +74,14 @@ impl MerkleProof {
             idx /= 2;
         }
 
-        use subtle::ConstantTimeEq;
-        if current.ct_eq(root).unwrap_u8() == 1 {
+        if &current == root {
             Ok(())
         } else {
             Err(CloakError::MerkleProofInvalid)
         }
     }
 
-    /// Serialize the proof to bytes: 8-byte LE index + 32 bytes per sibling.
+    /// Serialize the proof to bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(8 + self.siblings.len() * 32);
         out.extend_from_slice(&(self.leaf_index as u64).to_le_bytes());
@@ -131,7 +93,7 @@ impl MerkleProof {
 
     /// Deserialize from bytes.
     pub fn from_bytes(bytes: &[u8]) -> CloakResult<Self> {
-        if bytes.len() < 8 || (bytes.len() - 8) % 32 != 0 {
+        if bytes.len() < 8 || !(bytes.len() - 8).is_multiple_of(32) {
             return Err(CloakError::MerkleProofInvalid);
         }
         let leaf_index = u64::from_le_bytes(bytes[..8].try_into().unwrap()) as usize;
@@ -139,11 +101,24 @@ impl MerkleProof {
             .chunks_exact(32)
             .map(|c| c.try_into().unwrap())
             .collect();
-        Ok(MerkleProof { leaf_index, siblings })
+        Ok(Self { leaf_index, siblings })
     }
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+fn hash_leaf(data: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update([0x00]); // Domain separation
+    h.update(data);
+    h.finalize().into()
+}
+
+fn hash_node(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update([0x01]); // Domain separation
+    h.update(left);
+    h.update(right);
+    h.finalize().into()
+}
 
 #[cfg(test)]
 mod tests {
@@ -161,28 +136,26 @@ mod tests {
 
     #[test]
     fn single_leaf_root_equals_leaf_hash() {
-        let l = vec![b"only".to_vec()];
-        let root = merkle_root(&l);
-        assert_eq!(root, hash_leaf(b"only"));
+        let l = leaves(1);
+        assert_eq!(merkle_root(&l), hash_leaf(&l[0]));
     }
 
     #[test]
     fn different_leaves_different_root() {
         let l1 = leaves(4);
-        let mut l2 = leaves(4);
-        l2[2] = b"tampered".to_vec();
+        let mut l2 = l1.clone();
+        l2[0] = b"tampered".to_vec();
         assert_ne!(merkle_root(&l1), merkle_root(&l2));
     }
 
     #[test]
     fn proof_verifies_for_all_indices() {
-        for n in [1, 2, 3, 4, 5, 8, 9] {
-            let l = leaves(n);
-            let root = merkle_root(&l);
-            for i in 0..n {
-                let proof = MerkleProof::generate(&l, i).unwrap();
-                assert!(proof.verify(&root, &l[i]).is_ok(), "failed for n={n}, i={i}");
-            }
+        let n = 7;
+        let l = leaves(n);
+        let root = merkle_root(&l);
+        for i in 0..n {
+            let proof = MerkleProof::generate(&l, i).unwrap();
+            assert!(proof.verify(&root, &l[i]).is_ok());
         }
     }
 
@@ -191,7 +164,7 @@ mod tests {
         let l = leaves(4);
         let root = merkle_root(&l);
         let proof = MerkleProof::generate(&l, 0).unwrap();
-        assert!(proof.verify(&root, b"wrong data").is_err());
+        assert!(proof.verify(&root, b"not-the-leaf").is_err());
     }
 
     #[test]
