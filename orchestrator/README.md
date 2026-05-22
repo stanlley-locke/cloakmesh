@@ -32,11 +32,14 @@ poetry run cloakcli node reputation
 
 ### 3. P2P Communication
 ```bash
-# Start listening for messages
+# Start listening for messages in real-time
 poetry run cloakcli chat listen
 
-# Send a message
+# Send a private message via onion circuit
 poetry run cloakcli chat send "Your message" "SenderName"
+
+# View local message log
+poetry run cloakcli chat history
 ```
 
 ### 4. Hosting & Discovery
@@ -46,6 +49,18 @@ poetry run cloakcli node host your-address.cloak 80
 
 # Announce yourself to the DHT
 poetry run cloakcli dht publish your-address.cloak
+```
+
+### 5. File Management
+```bash
+# Start secure file receiver
+poetry run cloakcli file receive
+
+# Share a file
+poetry run cloakcli file share sample.txt <TARGET_ADDR>
+
+# List all received files
+poetry run cloakcli file list
 ```
 
 ## 🧪 Testing

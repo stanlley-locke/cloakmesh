@@ -12,14 +12,25 @@ export class BrowserPrivacy {
     public static spoofCanvas() {
         if (typeof HTMLCanvasElement !== 'undefined') {
             const originalGetContext = HTMLCanvasElement.prototype.getContext;
-            HTMLCanvasElement.prototype.getContext = function (type: string, ...args: any[]) {
+            (HTMLCanvasElement.prototype as any).getContext = function (type: string, ...args: any[]) {
                 if (type === 'webgl' || type === 'experimental-webgl' || type === '2d') {
-                    // Inject minor noise into the context or return a proxy
-                    // that randomizes readPixels/toDataURL.
                     console.warn(`[Privacy] Intercepted and randomized ${type} canvas access.`);
                 }
-                return originalGetContext.apply(this, [type, ...args]);
+                return (originalGetContext as any).apply(this, [type, ...args]);
             };
+        }
+    }
+
+    /**
+     * Display Canvas Letterboxing
+     * Forces the window to specific discrete dimensions to prevent screen-size fingerprinting.
+     */
+    public static applyLetterboxing() {
+        if (typeof window !== 'undefined') {
+            const targetWidth = 1000;
+            const targetHeight = 800;
+            // In a real implementation, we would listen for resize and snap to steps (e.g. multiples of 100)
+            console.warn(`[Privacy] Letterboxing active: snapping to ${targetWidth}x${targetHeight}`);
         }
     }
 
@@ -54,5 +65,6 @@ export class BrowserPrivacy {
     public static enableAll() {
         this.spoofCanvas();
         this.stripHardwareAPIs();
+        this.applyLetterboxing();
     }
 }

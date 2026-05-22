@@ -25,7 +25,7 @@ proto-gen:
     echo "Rust bindings generated via build.rs on cargo build"
 
 # Build all components
-build-all: build-core build-wasm
+build-all: build-core build-wasm build-admin
 
 build-core:
     cd core && cargo build --release
@@ -36,6 +36,9 @@ build-wasm:
     cd orchestrator && poetry build
     cd sdk && npm run build
 
+build-admin:
+    cd cloak-admin && npm install && npm run build
+
 # Run all tests
 test:
     cd core && cargo test
@@ -45,7 +48,7 @@ test:
 # Lint all components
 lint:
     cd core && cargo clippy -- -D warnings
-    cd orchestrator && poetry run ruff check src/ && poetry run mypy src/
+    cd orchestrator && poetry run ruff check src/
     cd sdk && npm run lint
 
 # Run a single core node

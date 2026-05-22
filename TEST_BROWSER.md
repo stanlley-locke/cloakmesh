@@ -11,13 +11,13 @@ Before building, verify that the network lockdown is correctly implemented.
 ### Network Routing & Telemetry
 ```bash
 # Ensure proxy is hardcoded to 127.0.0.1:9050
-cat cloak-browser/browser/app/profile/05-custom-network.js | grep "network.proxy.socks"
+cat ../cloak-browser/browser/app/profile/05-custom-network.js | grep "network.proxy.socks"
 ```
 
 ### Custom TLD Hook (C++)
 ```bash
 # Verify .cloak and .onion are registered as valid TLDs
-cat cloak-browser/netwerk/dns/nsEffectiveTLDService.cpp | grep "EndsWith(\".cloak\")"
+cat ../cloak-browser/netwerk/dns/nsEffectiveTLDService.cpp | grep "EndsWith(\".cloak\")"
 ```
 
 ---
@@ -27,7 +27,7 @@ cat cloak-browser/netwerk/dns/nsEffectiveTLDService.cpp | grep "EndsWith(\".cloa
 The build process requires the `mach` build system and the `.mozconfig` manifest I have provided.
 
 ```bash
-cd cloak-browser
+cd ../cloak-browser
 
 # 1. Initialize the build environment (Select '1. Firefox for Desktop')
 ./mach bootstrap

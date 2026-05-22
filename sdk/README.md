@@ -7,6 +7,7 @@ Native browser and Node.js integration for building decentralized web applicatio
 *   **WASM Cryptography**: High-performance, Rust-compiled crypto engine for `Ed25519` identity and `Noise` handshakes.
 *   **Anti-Fingerprinting**: Integrated module for **Canvas/WebGL spoofing** and **Hardware API stripping** to protect web users.
 *   **Decentralized Client**: Full gRPC integration for interacting with mesh nodes from TypeScript.
+*   **CloakAdmin Dashboard**: Native Tauri application built using the SDK to provide a production-grade control panel.
 *   **Privacy-First Fetch**: Standardized headers and User-Agent profiles for all outbound mesh requests.
 
 ## 📦 Installation

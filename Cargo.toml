@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "wasm"]
+members = ["core", "wasm", "cloak-admin/src-tauri"]
 resolver = "2"
 
 [workspace.package]

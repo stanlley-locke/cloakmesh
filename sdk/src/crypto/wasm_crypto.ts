@@ -1,3 +1,4 @@
+// @ts-ignore
 import init, { KeyPair, X25519Exchange, cloak_address_from_pubkey } from '../../wasm/web/pkg/cloakmesh_wasm';
 
 export class WasmCrypto {

@@ -7,10 +7,10 @@ from google.protobuf.timestamp_pb2 import Timestamp
 # Add the generated proto directory to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from proto import cloakmesh_pb2
-from proto import cloakmesh_pb2_grpc
-from proto import cloak_service_pb2
-from proto import cloak_service_pb2_grpc
+from proto import cloakmesh_pb2  # noqa: E402
+from proto import cloakmesh_pb2_grpc  # noqa: E402
+from proto import cloak_service_pb2  # noqa: E402
+from proto import cloak_service_pb2_grpc  # noqa: E402
 
 class CloakGrpcClient:
     def __init__(self, host="127.0.0.1", port=4001):

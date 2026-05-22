@@ -1,8 +1,7 @@
 from rich.console import Console
 from cloakcli.api.grpc_client import CloakGrpcClient
 from proto import cloak_service_pb2
-from cloakcli.cloak_protocol import derive_address, parse_address
-import os
+from cloakcli.cloak_protocol import parse_address
 
 console = Console()
 
