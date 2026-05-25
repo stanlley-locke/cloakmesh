@@ -14,25 +14,32 @@ use tokio::sync::RwLock;
 
 use crate::errors::{CloakError, CloakResult};
 use crate::routing::circuit::CircuitManager;
+use crate::routing::dht::{DhtNode, DhtKey};
+use crate::cloak_protocol::address::parse_address;
+use crate::proto::v1::cloak_mesh_node_client::CloakMeshNodeClient;
+use crate::proto::v1::{TunnelData, CloakDescriptor};
+use prost::Message;
 
 /// Manages local-to-mesh and mesh-to-local traffic bridging.
 pub struct MeshBridge {
     circuit_manager: Arc<CircuitManager>,
-    hosted_sites: RwLock<HashMap<String, u16>>,
+    pub hosted_sites: RwLock<HashMap<String, u16>>,
+    dht: Arc<DhtNode>,
 }
 
 impl MeshBridge {
-    pub fn new(circuit_manager: Arc<CircuitManager>) -> Self {
+    pub fn new(circuit_manager: Arc<CircuitManager>, dht: Arc<DhtNode>) -> Self {
         Self { 
             circuit_manager,
             hosted_sites: RwLock::new(HashMap::new()),
+            dht,
         }
     }
 
     /// Start hosting a local service on a .cloak address.
     #[instrument(skip(self))]
     pub async fn host_service(&self, local_port: u16, cloak_address: &str) -> CloakResult<()> {
-        info!(port = local_port, addr = %cloak_address, "Hosting service on CloakMesh");
+        info!("[200] Hosting service on CloakMesh, port: {}, addr: {}", local_port, cloak_address);
         self.hosted_sites.write().await.insert(cloak_address.to_string(), local_port);
         Ok(())
     }
@@ -43,7 +50,7 @@ impl MeshBridge {
         let addr = format!("127.0.0.1:{}", proxy_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| CloakError::Other(anyhow::anyhow!(e)))?;
         
-        info!(addr = %addr, "SOCKS5 Proxy started. Visit .cloak addresses via this gateway.");
+        info!("[200] SOCKS5 Proxy started. Visit .cloak addresses via this gateway. addr: {}", addr);
 
         let bridge = self.clone();
         tokio::spawn(async move {
@@ -107,6 +114,8 @@ impl MeshBridge {
             _ => return Err(CloakError::Protocol("Unsupported SOCKS address type".into())),
         };
 
+        let address = address.trim().to_string();
+
         let mut port_buf = [0u8; 2];
         stream.read_exact(&mut port_buf).await.map_err(|_| CloakError::ConnectionClosed)?;
         let _port = u16::from_be_bytes(port_buf);
@@ -142,12 +151,97 @@ impl MeshBridge {
                 }
             } else {
                 drop(guard);
-                // Simulated connection for remote .cloak addresses not hosted locally
-                let msg = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nWelcome to CloakMesh!\nTarget Address: {}\nTunnel Circuit: {}\n",
-                    address, circuit.id
-                );
-                stream.write_all(msg.as_bytes()).await.map_err(|_| CloakError::ConnectionClosed)?;
+                info!("Address {} not hosted locally. Initiating remote proxy via TunnelStream...", address);
+                
+                // Kademlia DHT Network Lookup
+                let pubkey = parse_address(&address)
+                    .map_err(|e| CloakError::Protocol(format!("Invalid .cloak address: {}", e)))?;
+                let key = DhtKey(pubkey);
+                
+                let target_ip = match self.dht.find_value_network(&key).await {
+                    Ok(Some(data)) => {
+                        let descriptor = CloakDescriptor::decode(&data[..])
+                            .map_err(|_| CloakError::Other(anyhow::anyhow!("Failed to decode DHT descriptor")))?;
+                        if descriptor.intro_points.is_empty() {
+                            return Err(CloakError::Other(anyhow::anyhow!("No intro points found for address — descriptor was published without routing info")));
+                        }
+                        descriptor.intro_points[0].address.clone()
+                    }
+                    _ => return Err(CloakError::Other(anyhow::anyhow!("Failed to locate address in distributed DHT"))),
+                };
+
+                info!("Routing to intro point {} for {}", target_ip, address);
+
+                // Open gRPC directly to the intro point (the hosting node).
+                // In a full onion routing setup, this would go through guard/middle relays.
+                // The intro_point IS the node hosting the site, so we send a TunnelStream request
+                // with an empty path (meaning: "you are the destination").
+                let channel = tonic::transport::Channel::from_shared(format!("http://{}", target_ip))
+                    .map_err(|e| CloakError::Other(anyhow::anyhow!(e)))?
+                    .connect().await
+                    .map_err(|e| CloakError::Other(anyhow::anyhow!("Cannot reach intro point {}: {}", target_ip, e)))?;
+                    
+                let mut client = CloakMeshNodeClient::new(channel);
+                let (tx, rx) = tokio::sync::mpsc::channel(100);
+                
+                let req_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+                
+                // Send first chunk with routing info — empty path means we ARE the destination
+                let first_msg = TunnelData {
+                    circuit_id: circuit.id.clone(),
+                    target_address: address.clone(),
+                    path: vec![],  // empty path = intro point is the destination
+                    chunk: vec![],
+                    is_eof: false,
+                };
+                let _ = tx.send(first_msg).await;
+                
+                // Send gRPC request to get the response stream
+                if let Ok(response) = client.tunnel_stream(req_stream).await {
+                    let mut resp_stream = response.into_inner();
+                    let target_addr_clone = address.clone();
+                    let circ_clone = circuit.id.clone();
+                    let mut buf = [0u8; 8192];
+
+                    loop {
+                        tokio::select! {
+                            res = tokio::io::AsyncReadExt::read(stream, &mut buf) => {
+                                match res {
+                                    Ok(n) if n > 0 => {
+                                        let _ = tx.send(TunnelData {
+                                            circuit_id: circ_clone.clone(),
+                                            target_address: target_addr_clone.clone(),
+                                            path: vec![],
+                                            chunk: buf[..n].to_vec(),
+                                            is_eof: false,
+                                        }).await;
+                                    }
+                                    _ => {
+                                        let _ = tx.send(TunnelData {
+                                            circuit_id: circ_clone.clone(),
+                                            target_address: target_addr_clone.clone(),
+                                            path: vec![], chunk: vec![], is_eof: true
+                                        }).await;
+                                        break;
+                                    }
+                                }
+                            }
+                            msg_opt = tokio_stream::StreamExt::next(&mut resp_stream) => {
+                                match msg_opt {
+                                    Some(Ok(msg)) => {
+                                        if msg.is_eof { break; }
+                                        if tokio::io::AsyncWriteExt::write_all(stream, &msg.chunk).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    _ => break,
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    return Err(CloakError::Other(anyhow::anyhow!("Failed to open TunnelStream to intro point {}", target_ip)));
+                }
             }
         } else {
             stream.write_all(b"HTTP/1.1 403 Forbidden\r\n\r\nOnly .cloak addresses are allowed through this gateway.\n").await

@@ -92,7 +92,7 @@ impl CircuitManager {
             use rand::seq::SliceRandom;
             let mut rng = rand::thread_rng();
             guards.extend(candidates.choose_multiple(&mut rng, 3).cloned());
-            info!("Long-term guard nodes selected and pinned.");
+            info!("[202] Long-term guard nodes selected and pinned.");
         }
         
         use rand::seq::SliceRandom;
@@ -108,7 +108,7 @@ impl CircuitManager {
             return Err(CloakError::InsufficientRelays { need: hops_count, have: candidates.len() });
         }
 
-        info!(hops = hops_count, "Building new telescoping onion circuit");
+        info!("[202] Building new telescoping onion circuit, hops: {}", hops_count);
         
         let mut hops = Vec::new();
         
@@ -136,7 +136,7 @@ impl CircuitManager {
         let circuit_id = circuit.id.clone();
         self.circuits.write().await.insert(circuit_id.clone(), circuit);
         
-        info!(id = %circuit_id, "Three-hop circuit established via telescoping construction");
+        info!("[202] Three-hop circuit established via telescoping construction, id: {}", circuit_id);
         Ok(circuit_id)
     }
 

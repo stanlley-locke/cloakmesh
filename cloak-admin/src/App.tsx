@@ -53,11 +53,17 @@ const tauriInvoke = async (cmd: string, args: any = {}) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args)
     });
+    const data = await res.json();
     if (res.ok) {
-      return await res.json();
+      return data;
+    } else {
+      const errorObj = new Error(data.error || 'Unknown HTTP error');
+      (errorObj as any).code = data.code || 9999;
+      throw errorObj;
     }
   } catch (e) {
-    // offline, fall back to mock data
+    if ((e as any).code) throw e; // Pass through strict errors from gateway
+    // otherwise offline, fall back to mock data
   }
   
   if (cmd === 'get_node_status') return {
@@ -354,6 +360,19 @@ const WIDGET_CATALOG = [
   { id: 'MeshTraffic', title: 'TRAFFIC_ANALYSIS', subTitle: 'REALTIME_IO_FLOW', w: 4, h: 3 },
   { id: 'SecurityAudit', title: 'SECURITY_AUDIT', subTitle: 'CRYPTOGRAPHIC_LOG', w: 4, h: 3 },
   { id: 'UptimeMonitor', title: 'UPTIME_INDEX', subTitle: 'NODE_RELIABILITY', w: 3, h: 3 },
+  { id: 'IdentityView', title: 'IDENTITY_MANAGEMENT', subTitle: 'FULL_VIEW', w: 12, h: 8, isFullView: true },
+  { id: 'MessagingView', title: 'DARKNET_MESSENGER', subTitle: 'FULL_VIEW', w: 12, h: 10, isFullView: true },
+  { id: 'TerminalView', title: 'KERNEL_TERMINAL', subTitle: 'FULL_VIEW', w: 12, h: 12, isFullView: true },
+  { id: 'DiscoveryView', title: 'PEER_DISCOVERY', subTitle: 'FULL_VIEW', w: 12, h: 8, isFullView: true },
+  { id: 'CircuitsView', title: 'CIRCUIT_AUDIT', subTitle: 'FULL_VIEW', w: 12, h: 12, isFullView: true },
+  { id: 'DhtView', title: 'DHT_EXPLORER', subTitle: 'FULL_VIEW', w: 12, h: 12, isFullView: true },
+  { id: 'CapabilitiesView', title: 'PERMISSIONS', subTitle: 'FULL_VIEW', w: 12, h: 10, isFullView: true },
+  { id: 'EncryptionLabView', title: 'CRYPTO_LAB', subTitle: 'FULL_VIEW', w: 12, h: 10, isFullView: true },
+  { id: 'HostingView', title: 'SERVICE_HOSTING', subTitle: 'FULL_VIEW', w: 12, h: 10, isFullView: true },
+  { id: 'SettingsView', title: 'PREFERENCES', subTitle: 'FULL_VIEW', w: 12, h: 8, isFullView: true },
+  { id: 'HardwareView', title: 'HARDWARE_METRICS', subTitle: 'FULL_VIEW', w: 12, h: 8, isFullView: true },
+  { id: 'AnalyticsView', title: 'ANALYTICS', subTitle: 'FULL_VIEW', w: 12, h: 12, isFullView: true },
+  { id: 'BrowserView', title: 'DECENTRALIZED_BROWSER', subTitle: 'FULL_VIEW', w: 12, h: 14, isFullView: true }
 ];
 
 // ── Sub-Page Views ───────────────────────────────────────────────────────────
@@ -441,7 +460,7 @@ const MessagingView = () => {
   );
 };
 
-const TerminalView = ({ logs }: { logs: any[] }) => {
+const TerminalView = ({ logs }: any) => {
   return (
     <Card title="KERNEL_STRUCTURED_LOGS" subTitle="LIVE_SYSTEM_AUDIT">
        <div className="bg-slate-900 text-slate-100 p-8 h-[600px] font-mono text-[10px] flex flex-col space-y-3 overflow-y-auto rounded-[32px] border border-slate-800 shadow-2xl scrollbar-hide">
@@ -2034,10 +2053,29 @@ export default function App() {
   const [structuredLogs, setStructuredLogs] = useState<any[]>([]);
 
   // Dynamic Layout & Persistence
-  const [layout, setLayout] = useState<any[]>(() => {
-    const saved = localStorage.getItem('cloak_dashboard_layout_v18');
-    return saved ? JSON.parse(saved) : [{ i: 'AvailableHops', x: 0, y: 0, w: 2, h: 2 }, { i: 'AvgHSTime', x: 0, y: 2, w: 2, h: 2 }, { i: 'MeanHandlingTime', x: 2, y: 0, w: 4, h: 4 }, { i: 'NetworkStability', x: 6, y: 0, w: 6, h: 4 }, { i: 'RelayAudit', x: 0, y: 4, w: 8, h: 4 }];
+  const [layouts, setLayouts] = useState<Record<string, any[]>>(() => {
+    const saved = localStorage.getItem('cloak_layouts_v19');
+    if (saved) return JSON.parse(saved);
+    return {
+      dashboard: [{ i: 'AvailableHops_1', type: 'AvailableHops', x: 0, y: 0, w: 2, h: 2 }, { i: 'AvgHSTime_1', type: 'AvgHSTime', x: 0, y: 2, w: 2, h: 2 }, { i: 'MeanHandlingTime_1', type: 'MeanHandlingTime', x: 2, y: 0, w: 4, h: 4 }, { i: 'NetworkStability_1', type: 'NetworkStability', x: 6, y: 0, w: 6, h: 4 }, { i: 'RelayAudit_1', type: 'RelayAudit', x: 0, y: 4, w: 8, h: 4 }],
+      identity: [{ i: 'IdentityView_1', type: 'IdentityView', x: 0, y: 0, w: 12, h: 8 }],
+      messenger: [{ i: 'MessagingView_1', type: 'MessagingView', x: 0, y: 0, w: 12, h: 10 }],
+      terminal: [{ i: 'TerminalView_1', type: 'TerminalView', x: 0, y: 0, w: 12, h: 12 }],
+      discovery: [{ i: 'DiscoveryView_1', type: 'DiscoveryView', x: 0, y: 0, w: 12, h: 8 }],
+      circuits: [{ i: 'CircuitsView_1', type: 'CircuitsView', x: 0, y: 0, w: 12, h: 12 }],
+      dht: [{ i: 'DhtView_1', type: 'DhtView', x: 0, y: 0, w: 12, h: 12 }],
+      capabilities: [{ i: 'CapabilitiesView_1', type: 'CapabilitiesView', x: 0, y: 0, w: 12, h: 10 }],
+      encryption: [{ i: 'EncryptionLabView_1', type: 'EncryptionLabView', x: 0, y: 0, w: 12, h: 10 }],
+      hosting: [{ i: 'HostingView_1', type: 'HostingView', x: 0, y: 0, w: 12, h: 10 }],
+      settings: [{ i: 'SettingsView_1', type: 'SettingsView', x: 0, y: 0, w: 12, h: 8 }],
+      hardware: [{ i: 'HardwareView_1', type: 'HardwareView', x: 0, y: 0, w: 12, h: 8 }],
+      analytics: [{ i: 'AnalyticsView_1', type: 'AnalyticsView', x: 0, y: 0, w: 12, h: 12 }],
+      browser: [{ i: 'BrowserView_1', type: 'BrowserView', x: 0, y: 0, w: 12, h: 14 }]
+    };
   });
+
+  const currentLayout = layouts[page] || [];
+  const updateCurrentLayout = (newLayout: any[]) => { setLayouts(prev => ({ ...prev, [page]: newLayout })); };
 
   const [widgetSettings, setWidgetSettings] = useState<any>(() => {
     const saved = localStorage.getItem('cloak_widget_settings_v18');
@@ -2047,7 +2085,7 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
 
-  useEffect(() => { localStorage.setItem('cloak_dashboard_layout_v18', JSON.stringify(layout)); }, [layout]);
+  useEffect(() => { localStorage.setItem('cloak_layouts_v19', JSON.stringify(layouts)); }, [layouts]);
   useEffect(() => { localStorage.setItem('cloak_widget_settings_v18', JSON.stringify(widgetSettings)); }, [widgetSettings]);
 
   useEffect(() => {
@@ -2128,12 +2166,12 @@ export default function App() {
     const newWidget = { 
       i: instanceId, 
       type: module.id,
-      x: (layout.length * 2) % 12, 
+      x: (currentLayout.length * 2) % 12, 
       y: 100, 
       w: module.w, 
       h: module.h 
     };
-    setLayout((prev: any[]) => [...prev, newWidget]);
+    setLayouts((prev: any) => ({ ...prev, [page]: [...(prev[page] || []), newWidget] }));
     setShowLibrary(false);
     setNotifications((prev: any[]) => [{ id: Date.now(), type: 'success', msg: `Provisioned ${module.title}`, time: 'Just now' }, ...prev]);
   };
@@ -2253,63 +2291,63 @@ export default function App() {
                <div className="flex items-center space-x-3 bg-white p-2.5 rounded-3xl border border-slate-100 shadow-sm"><div className="p-2 bg-slate-50 rounded-2xl text-slate-500"><Clock size={16} /></div><div className="pr-6 border-r border-slate-50"><div className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">LOCAL_SEC_TIME</div><div className="text-xs font-bold text-slate-900 leading-none font-mono italic underline">{new Date().toLocaleTimeString()}</div></div><div className="px-6"><div className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">MESH_REACHABILITY</div><div className="flex items-center text-xs font-bold text-slate-900 leading-none"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />NOMINAL</div></div></div>
             </div>
 
-            {page === 'dashboard' ? (
+            {page ? (
               <ResponsiveGridLayout
-                className="layout"
-                layouts={{ lg: layout }}
+                className="layout min-h-[500px]"
+                layouts={{ lg: currentLayout }}
                 breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
                 cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
                 rowHeight={60}
                 width={containerWidth}
                 isDraggable={isEditMode}
                 isResizable={isEditMode}
-                onLayoutChange={(newLayout: any) => setLayout(newLayout)}
+                onLayoutChange={(newLayout: any) => updateCurrentLayout(newLayout)}
               >
-                {layout.map((w: any) => {
+                {currentLayout.map((w: any) => {
                   const moduleType = w.type || w.i.split('_')[0];
                   const catalogItem = WIDGET_CATALOG.find(c => c.id === moduleType);
+                  
+                  const removeWidget = () => {
+                    setLayouts((prev: any) => ({ ...prev, [page]: prev[page].filter((l: any) => l.i !== w.i) }));
+                  };
+
+                  const innerContent = Widgets[moduleType] ? React.createElement(Widgets[moduleType], { status, relays, searchQuery, filterStatus, settings: widgetSettings[w.i], logs: structuredLogs }) : <div className="text-slate-300 italic text-[10px]">Component Missing</div>;
+
                   return (
-                    <div key={w.i}>
-                      <Card 
-                        title={catalogItem?.title || moduleType} 
-                        subTitle={catalogItem?.subTitle}
-                        isEditMode={isEditMode}
-                        settings={widgetSettings[w.i]}
-                        updateSettings={(s: any) => updateWidgetSettings(w.i, s)}
-                        onRemove={() => setLayout((prev: any[]) => prev.filter((l: any) => l.i !== w.i))}
-                      >
-                        {Widgets[moduleType] ? React.createElement(Widgets[moduleType], { status, relays, searchQuery, filterStatus, settings: widgetSettings[w.i] }) : <div className="text-slate-300 italic text-[10px]">Component Missing</div>}
-                      </Card>
+                    <div key={w.i} className="h-full">
+                      {catalogItem?.isFullView ? (
+                        <div className="h-full relative group w-full">
+                          {isEditMode && (
+                            <div className="absolute inset-0 bg-slate-900/10 z-50 flex items-center justify-center cursor-move border-2 border-dashed border-slate-400 rounded-3xl backdrop-blur-[1px]">
+                              <div className="bg-white/90 p-4 rounded-2xl shadow-2xl flex flex-col items-center space-y-4 text-slate-900">
+                                <Move size={32} className="animate-bounce" />
+                                <button onMouseDown={(e) => { e.stopPropagation(); removeWidget(); }} className="p-2 bg-rose-500 text-white rounded-xl hover:bg-rose-600 transition-colors shadow-lg pointer-events-auto">
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <div className={`h-full w-full ${isEditMode ? 'opacity-50 pointer-events-none' : ''}`}>
+                             {innerContent}
+                          </div>
+                        </div>
+                      ) : (
+                        <Card 
+                          title={catalogItem?.title || moduleType} 
+                          subTitle={catalogItem?.subTitle}
+                          isEditMode={isEditMode}
+                          settings={widgetSettings[w.i]}
+                          updateSettings={(s: any) => updateWidgetSettings(w.i, s)}
+                          onRemove={removeWidget}
+                          className="h-full w-full"
+                        >
+                          {innerContent}
+                        </Card>
+                      )}
                     </div>
                   );
                 })}
               </ResponsiveGridLayout>
-            ) : page === 'identity' ? (
-              <IdentityView status={status} />
-            ) : page === 'messenger' ? (
-              <MessagingView />
-            ) : page === 'terminal' ? (
-              <TerminalView logs={structuredLogs} />
-            ) : page === 'discovery' ? (
-              <DiscoveryView status={status} />
-            ) : page === 'circuits' ? (
-              <CircuitsView />
-            ) : page === 'dht' ? (
-              <DhtView />
-            ) : page === 'capabilities' ? (
-              <CapabilitiesView />
-            ) : page === 'encryption' ? (
-              <EncryptionLabView />
-            ) : page === 'hosting' ? (
-              <HostingView />
-            ) : page === 'settings' ? (
-              <SettingsView />
-            ) : page === 'hardware' ? (
-              <HardwareView status={status} />
-            ) : page === 'analytics' ? (
-              <AnalyticsView />
-            ) : page === 'browser' ? (
-              <BrowserView />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[500px] border-2 border-dashed border-slate-200 rounded-[40px] bg-white/40 shadow-inner">
                 <div className="p-10 bg-white rounded-[40px] shadow-2xl border border-slate-50 text-center space-y-8 max-w-xl">
@@ -2337,7 +2375,7 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto p-10 grid grid-cols-2 gap-8 scrollbar-hide">
               {WIDGET_CATALOG.map((w) => (
-                <div key={w.id} className={`p-8 border border-slate-100 rounded-3xl cursor-pointer hover:border-slate-900 hover:shadow-2xl transition-all group flex items-center justify-between ${layout.find((l: any) => (l.type || l.i.split('_')[0]) === w.id) ? 'opacity-40 pointer-events-none grayscale' : 'bg-slate-50'}`} onClick={() => addWidget(w)}>
+                <div key={w.id} className={`p-8 border border-slate-100 rounded-3xl cursor-pointer hover:border-slate-900 hover:shadow-2xl transition-all group flex items-center justify-between ${currentLayout.find((l: any) => (l.type || l.i.split('_')[0]) === w.id) ? 'opacity-40 pointer-events-none grayscale' : 'bg-slate-50'}`} onClick={() => addWidget(w)}>
                   <div className="flex items-center space-x-8">
                     <div className="w-20 h-20 bg-white rounded-2xl border border-slate-100 flex items-center justify-center group-hover:scale-110 transition-all shadow-md text-slate-400">
                        {w.id === 'RelayAudit' && <List size={28} />}
@@ -2376,3 +2414,9 @@ export default function App() {
     </div>
   );
 }
+
+Object.assign(Widgets, {
+  IdentityView, MessagingView, TerminalView, DiscoveryView,
+  CircuitsView, DhtView, CapabilitiesView, EncryptionLabView,
+  HostingView, SettingsView, HardwareView, AnalyticsView, BrowserView
+});

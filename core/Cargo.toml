@@ -77,6 +77,8 @@ prometheus = "0.13"
 
 # Collections
 indexmap = "2.0"
+reed-solomon-erasure = "6.0.0"
+sled = "0.34.7"
 
 [build-dependencies]
 tonic-build = "0.11"

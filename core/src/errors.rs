@@ -2,6 +2,18 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CloakSuccess {
+    // 200: Generic Success
+    Ok = 200,
+    // 201: DHT
+    DhtStored = 201,
+    // 202: Circuit
+    CircuitEstablished = 202,
+    // 203: Message
+    MessageDelivered = 203,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CloakErrorCode {
     // 1000: CRYPTO
     KeyGenFailed = 1001,

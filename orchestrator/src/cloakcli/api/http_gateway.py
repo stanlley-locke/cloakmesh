@@ -47,6 +47,11 @@ class GatewayHandler(BaseHTTPRequestHandler):
         sys.stderr.write(f"  {now}  {level} cloakmesh_gateway: {msg}\n")
         sys.stderr.flush()
 
+    def log_request(self, code='-', size='-'):
+        if "get_node_status" in self.path or "get_analytics" in self.path or "get_logs" in self.path or "get_hosted_sites" in self.path:
+            return
+        super().log_request(code, size)
+
     def do_OPTIONS(self):
         self._set_headers(200)
 
@@ -57,6 +62,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             return
 
         cmd = self.path[5:]  # strip /api/
+
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
         args = {}
@@ -129,7 +135,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     ]
 
             elif cmd == 'get_logs':
-                import re
+                import re, json
                 log_pattern = re.compile(
                     r'^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(DEBUG|INFO|WARN|ERROR)\s+([^:]+):\s*(.*)$'
                 )
@@ -148,7 +154,40 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     current_entry = None
                     for line in lines:
                         line_str = line.strip('\r\n')
+                        if not line_str:
+                            continue
                         line_str = ansi_escape.sub('', line_str)
+                        
+                        # Try JSON parsing first (new core format)
+                        if line_str.startswith('{'):
+                            try:
+                                j = json.loads(line_str)
+                                ts = j.get('timestamp', '')
+                                time_str = ts
+                                if 'T' in ts:
+                                    time_part = ts.split('T')[1].rstrip('Z')
+                                    time_str = time_part.split('.')[0] if '.' in time_part else time_part
+                                
+                                msg = j.get('fields', {}).get('message', '')
+                                # Append other fields for context
+                                extra_fields = {k: v for k, v in j.get('fields', {}).items() if k != 'message'}
+                                if extra_fields:
+                                    msg += f" {extra_fields}"
+
+                                current_entry = {
+                                    "timestamp": time_str,
+                                    "raw_timestamp": ts,
+                                    "level": j.get('level', 'INFO'),
+                                    "target": j.get('target', default_tgt),
+                                    "message": msg
+                                }
+                                logs.append(current_entry)
+                                current_entry = None
+                                continue
+                            except json.JSONDecodeError:
+                                pass
+                                
+                        # Fallback to Regex for gateway logs or non-JSON logs
                         match = log_pattern.match(line_str)
                         if match:
                             if current_entry:
@@ -156,10 +195,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
                             timestamp_raw = match.group(1)
                             time_str = timestamp_raw
                             if 'T' in timestamp_raw:
-                                time_part = timestamp_raw.split('T')[1]
-                                time_str = time_part.rstrip('Z')
-                                if '.' in time_str:
-                                    time_str = time_str.split('.')[0]
+                                time_part = timestamp_raw.split('T')[1].rstrip('Z')
+                                time_str = time_part.split('.')[0] if '.' in time_part else time_part
                             
                             current_entry = {
                                 "timestamp": time_str,
@@ -169,14 +206,14 @@ class GatewayHandler(BaseHTTPRequestHandler):
                                 "message": match.group(4)
                             }
                         else:
-                            if current_entry and line_str.strip():
-                                current_entry["message"] += " (" + line_str.strip() + ")"
+                            if current_entry:
+                                current_entry["message"] += " (" + line_str + ")"
                     if current_entry:
                         logs.append(current_entry)
 
                 script_dir = os.path.dirname(os.path.abspath(__file__))
                 root_dir = os.path.abspath(os.path.join(script_dir, "..", "..", "..", ".."))
-                core_log_path = os.path.join(root_dir, "core.log")
+                core_log_path = os.path.join(root_dir, "core_json.log")
                 gateway_log_path = os.path.join(root_dir, "gateway.log")
                 
                 process_log_file(core_log_path, "core")
@@ -295,16 +332,17 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 if not target_address.endswith('.cloak'):
                     result = {"error": "Only .cloak addresses are supported", "html": ""}
                 else:
-                    # Attempt to fetch via local SOCKS5 proxy at 127.0.0.1:9050
+                    port = int(os.environ.get("CLOAK_GRPC_PORT", 4001))
+                    proxy_port = port + 5049
+                    # Attempt to fetch via local SOCKS5 proxy at 127.0.0.1:proxy_port
                     html_content = ""
                     fetch_error = None
                     try:
                         import socket
-                        import struct
                         # SOCKS5 connect
                         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         s.settimeout(5)
-                        s.connect(("127.0.0.1", 9050))
+                        s.connect(("127.0.0.1", proxy_port))
                         # Greeting
                         s.sendall(b'\x05\x01\x00')
                         resp = s.recv(2)
@@ -340,7 +378,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                         "address": target_address,
                         "html": html_content,
                         "error": fetch_error,
-                        "proxied_via": "socks5://127.0.0.1:9050"
+                        "proxied_via": f"socks5://127.0.0.1:{proxy_port}"
                     }
 
             else:
@@ -353,7 +391,13 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             self._set_headers(500)
-            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            err_str = str(e)
+            code = 9999
+            import re
+            m = re.search(r'\[(\d{4})\]', err_str)
+            if m:
+                code = int(m.group(1))
+            self.wfile.write(json.dumps({"error": err_str, "code": code}).encode('utf-8'))
         finally:
             if client:
                 client.close()

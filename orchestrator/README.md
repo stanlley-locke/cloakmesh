@@ -14,6 +14,8 @@ The production-grade management and communication interface for CloakMesh nodes.
 
 ## 🚀 Usage
 
+The orchestrator now features a beautiful, fully-interactive Typer CLI menu!
+
 ### 1. Installation
 Ensure you have `poetry` installed:
 ```bash
@@ -21,46 +23,39 @@ cd orchestrator
 poetry install
 ```
 
-### 2. Monitoring the Mesh
+### 2. Enter the Interactive Dashboard
+Launch the unified interface that gives you access to all mesh commands:
 ```bash
-# View active onion tunnels
-poetry run cloakcli node circuits
+poetry run cloakcli interactive
+```
+From here, you will see a rich, color-coded menu of all available features.
 
-# View relay trust scores
-poetry run cloakcli node reputation
+### 3. Build & Host Websites
+```bash
+# Inside the interactive menu
+> site-init
+# Generates a beautiful HTML project.
+
+> host-static
+# Starts a local web server, binds it to the mesh, and publishes to the DHT!
 ```
 
-### 3. P2P Communication
+### 4. Browse the Mesh
 ```bash
-# Start listening for messages in real-time
-poetry run cloakcli chat listen
-
-# Send a private message via onion circuit
-poetry run cloakcli chat send "Your message" "SenderName"
-
-# View local message log
-poetry run cloakcli chat history
+> browse
+# Enter any .cloak address to fetch it securely across the 3-hop proxy!
 ```
 
-### 4. Hosting & Discovery
+### 5. Chat & File Sharing
 ```bash
-# Map local server (port 80) to .cloak identity
-poetry run cloakcli node host your-address.cloak 80
+# Listen for incoming messages
+> listen
 
-# Announce yourself to the DHT
-poetry run cloakcli dht publish your-address.cloak
-```
-
-### 5. File Management
-```bash
-# Start secure file receiver
-poetry run cloakcli file receive
+# Send an encrypted message
+> chat
 
 # Share a file
-poetry run cloakcli file share sample.txt <TARGET_ADDR>
-
-# List all received files
-poetry run cloakcli file list
+> file-send
 ```
 
 ## 🧪 Testing

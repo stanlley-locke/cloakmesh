@@ -10,8 +10,12 @@ use tokio::time::{interval, Duration};
 use tracing::{debug, info};
 
 use crate::errors::CloakResult;
+use crate::storage::db::{StorageBackend, VolatileStorage, PersistentStorage};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use crate::proto::v1::cloak_mesh_node_client::CloakMeshNodeClient;
+use crate::proto::v1::{FindValueRequest, StoreValueRequest};
 
 /// Size of a Kademlia node ID or key (32 bytes / 256 bits for SHA-256 / Ed25519).
 pub const KEY_LEN: usize = 32;
@@ -194,30 +198,114 @@ impl DhtStorage {
     }
 }
 
-/// Main DHT orchestrator wrapping routing and storage.
 pub struct DhtNode {
     #[allow(dead_code)]
     routing: Arc<RwLock<RoutingTable>>,
-    storage: Arc<RwLock<DhtStorage>>,
+    storage: Arc<RwLock<Box<dyn StorageBackend>>>,
     authorities: Vec<String>, // Directory Authorities
 }
 
 impl DhtNode {
-    pub fn new(local_id: DhtKey) -> Self {
+    pub fn new(local_id: DhtKey, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String) -> Self {
+        let storage: Box<dyn StorageBackend> = if mine_atk {
+            match PersistentStorage::new(&format!("{}/sled_db", data_dir)) {
+                Ok(db) => {
+                    tracing::info!("[200] Persistent Sled storage initialized for ATK mining");
+                    Box::new(db)
+                },
+                Err(e) => {
+                    tracing::error!("Failed to init Sled DB: {}. Falling back to volatile storage.", e);
+                    Box::new(VolatileStorage::new())
+                }
+            }
+        } else {
+            Box::new(VolatileStorage::new())
+        };
+
         Self {
             routing: Arc::new(RwLock::new(RoutingTable::new(local_id))),
-            storage: Arc::new(RwLock::new(DhtStorage::new())),
-            authorities: vec!["bootstrap.cloakmesh.network:4001".to_string()],
+            storage: Arc::new(RwLock::new(storage)),
+            authorities: bootstrap_peers,
         }
     }
 
     /// Decentralized Bootstrapping
-    /// Connects to directory authorities and performs iterative FIND_NODE for own ID.
+    /// Connects to directory authorities, adds them to the routing table, then
+    /// performs a FindNode RPC for our own ID to discover all peers the authority knows.
     pub async fn bootstrap(&self) -> CloakResult<()> {
-        info!("Starting decentralized bootstrapping via directory authorities...");
+        info!("[201] Starting decentralized bootstrapping via {} directory authorities...", self.authorities.len());
+        
+        let local_id_hex = {
+            let rt = self.routing.read().await;
+            hex::encode(&rt.local_id.0)
+        };
+
         for auth in &self.authorities {
             debug!("Querying authority: {}", auth);
-            // In a full implementation, this would send a gRPC FIND_NODE request
+            let addr = format!("http://{}", auth);
+            if let Ok(mut client) = CloakMeshNodeClient::connect(addr.clone()).await {
+                // Step 1: Ping to add the authority itself to our routing table
+                let req = tonic::Request::new(crate::proto::v1::Ping {
+                    nonce: 0,
+                    sent_at: Some(prost_types::Timestamp {
+                        seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64,
+                        nanos: 0,
+                    }),
+                });
+                if let Ok(resp) = client.keep_alive(req).await {
+                    let pong = resp.into_inner();
+                    if let Ok(bytes) = hex::decode(&pong.node_id) {
+                        if bytes.len() == 32 {
+                            let mut id = [0u8; 32];
+                            id.copy_from_slice(&bytes);
+                            let peer = PeerInfo {
+                                id: DhtKey(id),
+                                address: auth.clone(),
+                                last_seen: tokio::time::Instant::now(),
+                                reputation: 100,
+                                flags: std::collections::HashSet::new(),
+                            };
+                            let added = self.routing.write().await.add_peer(peer);
+                            if added {
+                                info!("[201] Added bootstrap authority {} (id: {})", auth, hex::encode(&id[0..4]));
+                            } else {
+                                // Same-ID node or full bucket — still usable via authorities list
+                                info!("[201] Bootstrap authority {} reachable (same identity or full bucket)", auth);
+                            }
+                        }
+                    }
+                }
+
+                // Step 2: FindNode for our own ID to discover peers the authority knows
+                // This is the core of Kademlia bootstrapping: "who else is near me?"
+                let find_req = tonic::Request::new(crate::proto::v1::FindNodeRequest {
+                    target_id: local_id_hex.clone(),
+                });
+                if let Ok(resp) = client.find_node(find_req).await {
+                    let discovered = resp.into_inner().nodes;
+                    info!("[201] Peer discovery via FindNode returned {} candidates", discovered.len());
+                    for contact in discovered {
+                        if let Ok(bytes) = hex::decode(&contact.node_id) {
+                            if bytes.len() == 32 && !contact.address.is_empty() {
+                                let mut id = [0u8; 32];
+                                id.copy_from_slice(&bytes);
+                                let peer = PeerInfo {
+                                    id: DhtKey(id),
+                                    address: contact.address.clone(),
+                                    last_seen: tokio::time::Instant::now(),
+                                    reputation: 80,
+                                    flags: std::collections::HashSet::new(),
+                                };
+                                if self.routing.write().await.add_peer(peer) {
+                                    info!("[201] Discovered peer {} at {}", hex::encode(&id[0..4]), contact.address);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                tracing::warn!("Failed to connect to bootstrap peer {}", auth);
+            }
         }
         Ok(())
     }
@@ -238,13 +326,12 @@ impl DhtNode {
 
     /// Store a value locally. In a full implementation, this also routes a STORE RPC.
     pub async fn store_local(&self, key: DhtKey, value: Vec<u8>, ttl: Duration) -> CloakResult<()> {
-        self.storage.write().await.insert(key, value, ttl);
-        Ok(())
+        self.storage.write().await.insert(key, value, ttl)
     }
 
     /// Retrieve a value locally. In a full implementation, this initiates a FIND_VALUE query.
     pub async fn get_local(&self, key: &DhtKey) -> CloakResult<Option<Vec<u8>>> {
-        Ok(self.storage.read().await.get(key))
+        self.storage.read().await.get(key)
     }
 
     /// List all known peers in the routing table.
@@ -252,7 +339,110 @@ impl DhtNode {
         let routing = self.routing.read().await;
         routing.buckets.iter().flat_map(|b| b.peers.iter().cloned()).collect()
     }
+
+    /// Retrieve the K closest peers to a given key
+    pub async fn get_closest_peers(&self, key: &DhtKey, count: usize) -> Vec<PeerInfo> {
+        let routing = self.routing.read().await;
+        routing.find_closest(key, count)
+    }
+
+    /// True Kademlia Iterative Find Value.
+    /// Falls back to directly querying bootstrap/authority peers if the routing
+    /// table is empty (e.g. all nodes share the same identity key during dev).
+    pub async fn find_value_network(&self, key: &DhtKey) -> CloakResult<Option<Vec<u8>>> {
+        // 1. Check local storage first
+        if let Some(val) = self.get_local(key).await? {
+            return Ok(Some(val));
+        }
+
+        // 2. Build initial candidate list from routing table (closest peers to key)
+        let mut to_query: Vec<String> = {
+            let routing = self.routing.read().await;
+            routing.find_closest(key, 3).into_iter().map(|p| p.address).collect()
+        };
+
+        // 3. If routing table has no peers (e.g. same-ID nodes can't add each other),
+        //    fall back to querying bootstrap/authority peers directly.
+        if to_query.is_empty() {
+            debug!("Routing table empty — querying {} bootstrap peers directly", self.authorities.len());
+            to_query.extend(self.authorities.iter().cloned());
+        }
+
+        // 4. Iterative Kademlia lookup
+        let mut queried = std::collections::HashSet::new();
+        while let Some(addr) = to_query.pop() {
+            if !queried.insert(addr.clone()) {
+                continue;
+            }
+
+            let connect_addr = format!("http://{}", addr);
+            if let Ok(mut client) = CloakMeshNodeClient::connect(connect_addr).await {
+                let req = tonic::Request::new(FindValueRequest {
+                    target_key: hex::encode(&key.0),
+                });
+
+                if let Ok(resp) = client.find_value(req).await {
+                    match resp.into_inner().result {
+                        Some(crate::proto::v1::find_value_response::Result::Value(val)) => {
+                            info!("Found value at peer {}", addr);
+                            return Ok(Some(val));
+                        }
+                        Some(crate::proto::v1::find_value_response::Result::Closest(closest_resp)) => {
+                            // Peer doesn't have it — add its suggested closer nodes
+                            for node in closest_resp.nodes {
+                                if !queried.contains(&node.address) {
+                                    to_query.push(node.address);
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// True Kademlia Replicated Store.
+    /// Stores locally, then replicates to the K closest peers in the routing table.
+    /// Falls back to replicating directly to bootstrap/authority peers when the
+    /// routing table is empty.
+    pub async fn store_value_network(&self, key: &DhtKey, value: Vec<u8>, ttl: Duration) -> CloakResult<()> {
+        // 1. Store locally
+        self.store_local(key.clone(), value.clone(), ttl).await?;
+
+        // 2. Collect replication targets from routing table
+        let mut targets: Vec<String> = {
+            let routing = self.routing.read().await;
+            routing.find_closest(key, 3).into_iter().map(|p| p.address).collect()
+        };
+
+        // 3. Fall back to bootstrap peers if routing table is empty
+        if targets.is_empty() {
+            debug!("Routing table empty — replicating to {} bootstrap peers directly", self.authorities.len());
+            targets.extend(self.authorities.iter().cloned());
+        }
+
+        // 4. Push value to each target
+        for addr in targets {
+            let connect_addr = format!("http://{}", addr);
+            if let Ok(mut client) = CloakMeshNodeClient::connect(connect_addr).await {
+                let req = tonic::Request::new(StoreValueRequest {
+                    key: hex::encode(&key.0),
+                    value: value.clone(),
+                    ttl_seconds: ttl.as_secs(),
+                });
+                match client.store_value_network(req).await {
+                    Ok(_) => info!("Replicated DHT value to peer {}", addr),
+                    Err(e) => debug!("Failed to replicate to {}: {}", addr, e),
+                }
+            }
+        }
+        Ok(())
+    }
 }
+
 
 #[cfg(test)]
 mod tests {

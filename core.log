@@ -1,7 +1,7 @@
 warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   /workspaces/cloakmesh/wasm/Cargo.toml
 workspace: /workspaces/cloakmesh/Cargo.toml
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.99s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.07s
      Running `target/debug/cloakmesh --port 4001 --id node-alpha`
 Config load warning: [9000] config: parse error: TOML parse error at line 7, column 1
   |
@@ -9,37 +9,37 @@ Config load warning: [9000] config: parse error: TOML parse error at line 7, col
   | ^^^^^^^^^
 missing field `build_timeout_ms`
  — using defaults
-  [2m2026-05-22T11:49:51.939852Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32mCloakMesh node starting, [1;32mnode_id[0m[32m: node-alpha, [1;32mport[0m[32m: 4001, [1;32mbootstrap_peers[0m[32m: 0[0m
+  [2m2026-05-25T08:18:09.785135Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32m[200] CloakMesh node starting, node_id: node-alpha, port: 4001, bootstrap_peers: 0[0m
     [2;3mat[0m core/src/main.rs:62
 
-  [2m2026-05-22T11:49:51.940667Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32mIdentity loaded, [1;32mcloak_address[0m[32m: ag3o2j2z4uredr7fudmv4zzrkmmmsqgjkgdb3pubczdtocptefwm5y7rrrmq.cloak, [1;32mpubkey[0m[32m: b6ed2759e52241c7e5a0d95e67315318c940c951861dbe8116473709f3216cce[0m
-    [2;3mat[0m core/src/main.rs:77
+  [2m2026-05-25T08:18:09.785957Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32m[200] Identity loaded, cloak_address: afwvx24tqjq5qidzjej5wo5ah3mjeunbgqw44tlnszftsybxpgy4jm4wdssq.cloak, pubkey: 6d5beb938261d820794913db3ba03ed89251a1342dce4d6d964b39603779b1c4[0m
+    [2;3mat[0m core/src/main.rs:72
 
-  [2m2026-05-22T11:49:51.940705Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32mNode configuration validated, [1;32mcell_size[0m[32m: 256, [1;32mpadding_enabled[0m[32m: true, [1;32mdefault_hops[0m[32m: 3, [1;32mpq_hybrid[0m[32m: true[0m
-    [2;3mat[0m core/src/main.rs:89
+  [2m2026-05-25T08:18:09.786134Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32m[200] Node configuration validated, cell_size: 256, padding_enabled: true, default_hops: 3, pq_hybrid: true[0m
+    [2;3mat[0m core/src/main.rs:80
 
-  [2m2026-05-22T11:49:51.941378Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32mgRPC server starting, [1;32maddr[0m[32m: 0.0.0.0:4001[0m
-    [2;3mat[0m core/src/main.rs:101
+  [2m2026-05-25T08:18:09.786738Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32m[200] gRPC server starting, addr: 0.0.0.0:4001[0m
+    [2;3mat[0m core/src/main.rs:86
 
-  [2m2026-05-22T11:49:51.941637Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32mNode fully initialized and listening[0m
-    [2;3mat[0m core/src/main.rs:117
-
-  [2m2026-05-22T11:49:51.941993Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::dht[0m[32m: [32mStarting decentralized bootstrapping via directory authorities...[0m
+  [2m2026-05-25T08:18:09.786778Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::dht[0m[32m: [32m[201] Starting decentralized bootstrapping via directory authorities...[0m
     [2;3mat[0m core/src/routing/dht.rs:217
 
-  [2m2026-05-22T11:49:51.942308Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32mBuilding new telescoping onion circuit, [1;32mhops[0m[32m: 3[0m
+  [2m2026-05-25T08:18:09.787057Z[0m [32m INFO[0m [1;32mcloakmesh[0m[32m: [32m[200] Node fully initialized and listening[0m
+    [2;3mat[0m core/src/main.rs:102
+
+  [2m2026-05-25T08:18:09.787430Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32m[202] Building new telescoping onion circuit, hops: 3[0m
     [2;3mat[0m core/src/routing/circuit.rs:111
     [2;3min[0m cloakmesh_core::routing::circuit::[1mbuild_circuit[0m [2;3mwith[0m [1mhops_count[0m: 3
 
-  [2m2026-05-22T11:49:51.942566Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32mLong-term guard nodes selected and pinned.[0m
+  [2m2026-05-25T08:18:09.787800Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32m[202] Long-term guard nodes selected and pinned.[0m
     [2;3mat[0m core/src/routing/circuit.rs:95
     [2;3min[0m cloakmesh_core::routing::circuit::[1mbuild_circuit[0m [2;3mwith[0m [1mhops_count[0m: 3
 
-  [2m2026-05-22T11:49:51.942648Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32mThree-hop circuit established via telescoping construction, [1;32mid[0m[32m: d61f61fc-8584-4855-bf29-90e8c88399fb[0m
+  [2m2026-05-25T08:18:09.788037Z[0m [32m INFO[0m [1;32mcloakmesh_core::routing::circuit[0m[32m: [32m[202] Three-hop circuit established via telescoping construction, id: dfbd27a8-cfa7-4250-b49a-b2b706b96911[0m
     [2;3mat[0m core/src/routing/circuit.rs:139
     [2;3min[0m cloakmesh_core::routing::circuit::[1mbuild_circuit[0m [2;3mwith[0m [1mhops_count[0m: 3
 
-  [2m2026-05-22T11:49:51.942773Z[0m [32m INFO[0m [1;32mcloakmesh_core::network::bridge[0m[32m: [32mSOCKS5 Proxy started. Visit .cloak addresses via this gateway., [1;32maddr[0m[32m: 127.0.0.1:9050[0m
+  [2m2026-05-25T08:18:09.788306Z[0m [32m INFO[0m [1;32mcloakmesh_core::network::bridge[0m[32m: [32m[200] SOCKS5 Proxy started. Visit .cloak addresses via this gateway. addr: 127.0.0.1:9050[0m
     [2;3mat[0m core/src/network/bridge.rs:46
     [2;3min[0m cloakmesh_core::network::bridge::[1mstart_client_proxy[0m [2;3mwith[0m [1mproxy_port[0m: 9050
 

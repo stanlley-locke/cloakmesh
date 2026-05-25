@@ -1,32 +1,37 @@
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use std::fs::File;
+use std::sync::Arc;
 
 use crate::config::LogLevel;
 
 /// Initialize the global tracing subscriber.
 ///
-/// - In production (JSON mode): structured JSON output suitable for log aggregators.
-/// - In development (pretty mode): human-readable colored output.
-pub fn init(level: LogLevel, json: bool) {
+/// Dual-logging:
+/// - Terminal (stdout): beautiful, color-coded human-readable output
+/// - File (core_json.log): strict JSON structured logs for the Gateway & React UI
+pub fn init(level: LogLevel, _json: bool) {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("cloakmesh={level},warn")));
 
-    if json {
+    let stdout_layer = fmt::layer()
+        .pretty()
+        .with_filter(filter.clone());
+
+    if let Ok(file) = File::create("core_json.log") {
+        let file_layer = fmt::layer()
+            .json()
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_writer(Arc::new(file))
+            .with_filter(filter);
+
         tracing_subscriber::registry()
-            .with(
-                fmt::layer()
-                    .json()
-                    .with_current_span(true)
-                    .with_span_list(true)
-                    .with_filter(filter),
-            )
+            .with(stdout_layer)
+            .with(file_layer)
             .init();
     } else {
         tracing_subscriber::registry()
-            .with(
-                fmt::layer()
-                    .pretty()
-                    .with_filter(filter),
-            )
+            .with(stdout_layer)
             .init();
     }
 }

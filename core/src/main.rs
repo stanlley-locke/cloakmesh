@@ -24,11 +24,14 @@ struct Cli {
     #[arg(long, help = "Override node ID")]
     id: Option<String>,
 
-    #[arg(long, help = "Bootstrap peer address (host:port)")]
-    bootstrap: Option<String>,
+    #[arg(long, help = "Bootstrap peer address (host:port); may be specified multiple times", num_args = 0..)]
+    bootstrap: Vec<String>,
 
-    #[arg(long, default_value = "false", help = "Output logs as JSON")]
+    #[arg(long, default_value_t = true, help = "Output logs as JSON")]
     json_logs: bool,
+
+    #[arg(long, default_value_t = false, help = "Enable persistent storage and mine ATK tokens")]
+    mine_atk: bool,
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -50,21 +53,25 @@ async fn main() -> Result<()> {
     if let Some(id) = cli.id {
         config.node_id = id;
     }
-    if let Some(bootstrap) = cli.bootstrap {
-        if !bootstrap.is_empty() {
-            config.bootstrap_peers.push(bootstrap);
+    // Extend bootstrap peers from CLI args (all --bootstrap flags)
+    for peer in cli.bootstrap {
+        if !peer.is_empty() {
+            config.bootstrap_peers.push(peer);
         }
     }
 
     // Initialize structured logging
     init_tracing(config.log_level, cli.json_logs);
 
-    info!(
-        node_id = %config.node_id,
-        port = config.listen_port,
-        bootstrap_peers = config.bootstrap_peers.len(),
-        "CloakMesh node starting"
-    );
+    info!("[200] CloakMesh node starting, node_id: {}, port: {}, bootstrap_peers: {}", config.node_id, config.listen_port, config.bootstrap_peers.len());
+
+    // Isolate data directories for local testing of multiple nodes
+    if config.data_dir == std::path::Path::new("data") {
+        config.data_dir = format!("data_{}", config.node_id).into();
+    }
+    if config.crypto.identity_key_path == std::path::Path::new("data/identity.pem") {
+        config.crypto.identity_key_path = format!("{}/identity.pem", config.data_dir.display()).into();
+    }
 
     // Ensure data directory exists
     std::fs::create_dir_all(&config.data_dir)?;
@@ -74,11 +81,7 @@ async fn main() -> Result<()> {
     let pubkey = identity.public_key_bytes();
     let cloak_address = derive_address(&pubkey);
 
-    info!(
-        cloak_address = %cloak_address,
-        pubkey = %hex::encode(pubkey),
-        "Identity loaded"
-    );
+    info!("[200] Identity loaded, cloak_address: {}, pubkey: {}", cloak_address, hex::encode(pubkey));
 
     // Initialize metrics
     let metrics = NodeMetrics::new();
@@ -86,19 +89,13 @@ async fn main() -> Result<()> {
     // Validate final config
     config.validate()?;
 
-    info!(
-        cell_size = config.traffic.cell_size_bytes,
-        padding_enabled = config.traffic.padding_enabled,
-        default_hops = config.circuit.default_hops,
-        pq_hybrid = config.crypto.pq_hybrid_enabled,
-        "Node configuration validated"
-    );
+    info!("[200] Node configuration validated, cell_size: {}, padding_enabled: {}, default_hops: {}, pq_hybrid: {}", config.traffic.cell_size_bytes, config.traffic.padding_enabled, config.circuit.default_hops, config.crypto.pq_hybrid_enabled);
 
     // Initialize Node state
-    let node = Arc::new(cloakmesh_core::node::CloakNode::new(pubkey, config.node_id.clone()));
+    let node = Arc::new(cloakmesh_core::node::CloakNode::new(pubkey, config.node_id.clone(), cli.mine_atk, config.bootstrap_peers.clone(), config.data_dir.to_string_lossy().into_owned(), config.listen_port));
 
     let addr = format!("0.0.0.0:{}", config.listen_port).parse()?;
-    info!(addr = %addr, "gRPC server starting");
+    info!("[200] gRPC server starting, addr: {}", addr);
 
     let server = tonic::transport::Server::builder()
         .add_service(cloakmesh_core::proto::v1::cloak_mesh_node_server::CloakMeshNodeServer::from_arc(node.clone()))
@@ -114,13 +111,14 @@ async fn main() -> Result<()> {
     // - Descriptor publication
     // ────────────────────────────────────────────────────────────────────────
 
-    info!("Node fully initialized and listening");
+    info!("[200] Node fully initialized and listening");
 
     // Start Phase 2 Client Proxy (Demo Mode)
     let node_clone = node.clone();
+    let proxy_port = config.listen_port + 5049; // 4001 -> 9050, 4002 -> 9051
     tokio::spawn(async move {
-        if let Err(e) = node_clone.start_proxy(9050).await {
-            eprintln!("Failed to start client proxy: {e}");
+        if let Err(e) = node_clone.start_proxy(proxy_port).await {
+            eprintln!("Failed to start client proxy: {}", e);
         }
     });
 

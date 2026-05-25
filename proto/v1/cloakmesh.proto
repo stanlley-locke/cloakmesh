@@ -42,6 +42,7 @@ message Ping {
 message Pong {
   uint64 nonce = 1;
   google.protobuf.Timestamp sent_at = 2;
+  string node_id = 3;
 }
 
 // Core node RPC service
@@ -53,6 +54,22 @@ service CloakMeshNode {
   // High-level communication (Phase 2+)
   rpc ChatStream(stream ChatMessage) returns (stream ChatMessage);
   rpc FileTransfer(stream FileChunk) returns (TransferAck);
+
+  // Phase 3: P2P TCP Proxying
+  rpc TunnelStream(stream TunnelData) returns (stream TunnelData);
+
+  // Phase 4: ATK Ledger & Decentralized Storage
+  rpc BroadcastTx(Transaction) returns (TransferAck);
+  rpc StoreShard(FileShard) returns (TransferAck);
+  rpc RetrieveShard(RetrieveShardRequest) returns (FileShard);
+
+  // Phase 5: Gossip
+  rpc Gossip(GossipMessage) returns (TransferAck);
+
+  // Phase 6: Full Kademlia DHT
+  rpc FindNode(FindNodeRequest) returns (FindNodeResponse);
+  rpc FindValue(FindValueRequest) returns (FindValueResponse);
+  rpc StoreValueNetwork(StoreValueRequest) returns (StoreValueResponse);
 }
 
 message ChatMessage {
@@ -72,4 +89,116 @@ message FileChunk {
 message TransferAck {
   bool success = 1;
   string message = 2;
+}
+
+message TunnelData {
+  string circuit_id = 1;
+  string target_address = 2;   // .cloak address
+  repeated string path = 5;    // list of IP:ports for the remaining hops
+  bytes chunk = 3;
+  bool is_eof = 4;
+}
+
+// ---------------------------------------------------------
+// Phase 4: ATK Ledger & Decentralized Storage
+// ---------------------------------------------------------
+
+message UTXO {
+  string txid = 1;
+  uint32 vout = 2;
+  uint64 amount = 3;     // ATK balance (in smallest unit)
+  string address = 4;    // ATK address (derived from ed25519)
+}
+
+message TransactionInput {
+  string txid = 1;
+  uint32 vout = 2;
+  bytes signature = 3;
+  bytes pubkey = 4;
+}
+
+message TransactionOutput {
+  uint64 amount = 1;
+  string address = 2;
+}
+
+message Transaction {
+  string id = 1;         // SHA-256 hash of inputs/outputs
+  repeated TransactionInput inputs = 2;
+  repeated TransactionOutput outputs = 3;
+  uint64 timestamp = 4;
+}
+
+message FileShard {
+  string file_hash = 1;  // SHA-256 of the original file
+  uint32 shard_index = 2;
+  bool is_parity = 3;
+  bytes data = 4;        // Raw binary payload
+}
+
+message RetrieveShardRequest {
+  string file_hash = 1;
+  uint32 shard_index = 2;
+}
+
+// ---------------------------------------------------------
+// Phase 5: Gossip & File Manifests
+// ---------------------------------------------------------
+
+message FileManifest {
+  string file_hash = 1;
+  uint64 size_bytes = 2;
+  uint32 data_shards = 3;
+  uint32 parity_shards = 4;
+  repeated string shard_hashes = 5; // Ordered hashes of the individual shards
+  string owner_address = 6;         // ATK address
+  uint64 timestamp = 7;
+}
+
+message GossipMessage {
+  string message_id = 1;       // Unique ID to prevent broadcast storms
+  string sender_address = 2;
+  
+  oneof payload {
+    Transaction transaction = 3;
+    FileManifest manifest = 4;
+  }
+}
+
+// ---------------------------------------------------------
+// Phase 6: Full Kademlia DHT
+// ---------------------------------------------------------
+
+message NodeContact {
+  string node_id = 1;      // Base32 encoded public key (DHT Key)
+  string address = 2;      // IP:Port or Multiaddr
+}
+
+message FindNodeRequest {
+  string target_id = 1;    // ID being searched for
+}
+
+message FindNodeResponse {
+  repeated NodeContact nodes = 1; // K closest nodes
+}
+
+message FindValueRequest {
+  string target_key = 1;   // The hash of the key being searched for
+}
+
+message FindValueResponse {
+  oneof result {
+    bytes value = 1;                // The value if found
+    FindNodeResponse closest = 2;   // The K closest nodes if not found
+  }
+}
+
+message StoreValueRequest {
+  string key = 1;
+  bytes value = 2;
+  uint64 ttl_seconds = 3;
+}
+
+message StoreValueResponse {
+  bool success = 1;
 }

@@ -14,6 +14,8 @@ The `core` crate handles the low-level heavy lifting for the entire network:
 *   **`src/network/`**:
     *   **TCP Transport**: Framed, length-prefixed transport with strict resource limits.
     *   **Mesh Bridge**: The native SOCKS5 gateway and local hosting proxy.
+*   **`src/node.rs`**:
+    *   **TunnelStream RPC**: Bidirectional gRPC streams for true P2P source-routed TCP proxying.
 *   **`src/cloak_protocol/`**:
     *   **Traffic Engine**: 514B cell framing, cover traffic injection, and timing jitter.
     *   **Address Module**: Bech32 `.cloak` address derivation and validation.
