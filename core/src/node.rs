@@ -569,7 +569,7 @@ impl CloakService for CloakNode {
         descriptor.encode(&mut buf).map_err(|e| Status::internal(e.to_string()))?;
 
         let key = DhtKey(pubkey);
-        self.dht.store_local(key, buf, Duration::from_secs(3600)).await
+        self.dht.store_value_network(&key, buf, Duration::from_secs(3600)).await
             .map_err(|_| Status::internal("DHT storage failed"))?;
 
         Ok(Response::new(PublishAck {
@@ -622,46 +622,18 @@ impl CloakService for CloakNode {
         &self,
         request: Request<HostRequest>,
     ) -> Result<Response<HostAck>, Status> {
-        use prost::Message;
         let req = request.into_inner();
         self.bridge.host_service(req.local_port as u16, &req.cloak_address).await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        // Build a complete CloakDescriptor with this node's gRPC address as an IntroductionPoint.
-        // This is critical: without intro_points, the SOCKS5 bridge cannot route traffic
-        // to this site from remote nodes.
-        let pubkey = parse_address(&req.cloak_address)
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
-
-        let node_grpc_address = format!("127.0.0.1:{}", self.listen_port);
-        let descriptor = CloakDescriptor {
-            cloak_address: req.cloak_address.clone(),
-            identity_pubkey: pubkey.to_vec(),
-            version: 1,
-            intro_points: vec![crate::proto::v1::IntroductionPoint {
-                peer_id: hex::encode(&self.identity_pubkey),
-                address: node_grpc_address.clone(),
-                auth_key: vec![],
-            }],
-            ..Default::default()
-        };
-
-        let mut buf = Vec::with_capacity(descriptor.encoded_len());
-        descriptor.encode(&mut buf).map_err(|e| Status::internal(e.to_string()))?;
-
-        let key = DhtKey(pubkey);
-        // Store locally and replicate to peers in the DHT
-        self.dht.store_value_network(&key, buf, Duration::from_secs(3600)).await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
         tracing::info!(
-            "[200] Hosting {} on local port {}; published descriptor with intro_point {}",
-            req.cloak_address, req.local_port, node_grpc_address
+            "[200] Bridged {} to local port {} (descriptor publishing is deferred to CLI)",
+            req.cloak_address, req.local_port
         );
 
         Ok(Response::new(HostAck {
             success: true,
-            message: format!("Successfully hosting {} on local port {} and published to DHT", req.cloak_address, req.local_port),
+            message: format!("Successfully hosting {} on local port {}", req.cloak_address, req.local_port),
         }))
     }
 }
