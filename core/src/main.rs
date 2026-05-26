@@ -196,6 +196,10 @@ async fn main() -> Result<()> {
         config.node_id = id;
     }
 
+    // Ensure data directory and identity key are unique per node id to prevent collisions
+    config.data_dir = std::path::PathBuf::from(format!("./data_{}", config.node_id));
+    config.crypto.identity_key_path = config.data_dir.join("identity.key");
+
     // ── Collect all bootstrap peers ──────────────────────────────────────────
     let mut raw_peers: Vec<String> = Vec::new();
 

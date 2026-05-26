@@ -42,3 +42,4 @@ core/src/proto/
 # Browser build output
 cloak-browser/obj*/
 cloak-browser/.mozbuild/logs/
+core/data/
