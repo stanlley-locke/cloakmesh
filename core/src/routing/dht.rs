@@ -200,13 +200,14 @@ impl DhtStorage {
 
 pub struct DhtNode {
     #[allow(dead_code)]
-    routing: Arc<RwLock<RoutingTable>>,
+    pub routing: Arc<RwLock<RoutingTable>>,
     storage: Arc<RwLock<Box<dyn StorageBackend>>>,
     authorities: Vec<String>, // Directory Authorities
+    public_addr: Option<String>,
 }
 
 impl DhtNode {
-    pub fn new(local_id: DhtKey, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String) -> Self {
+    pub fn new(local_id: DhtKey, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String, public_addr: Option<String>) -> Self {
         let storage: Box<dyn StorageBackend> = if mine_atk {
             match PersistentStorage::new(&format!("{}/sled_db", data_dir)) {
                 Ok(db) => {
@@ -226,6 +227,7 @@ impl DhtNode {
             routing: Arc::new(RwLock::new(RoutingTable::new(local_id))),
             storage: Arc::new(RwLock::new(storage)),
             authorities: bootstrap_peers,
+            public_addr,
         }
     }
 
@@ -250,6 +252,8 @@ impl DhtNode {
                         seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64,
                         nanos: 0,
                     }),
+                    requester_id: local_id_hex.clone(),
+                    requester_address: self.public_addr.clone().unwrap_or_default(),
                 });
                 if let Ok(resp) = client.keep_alive(req).await {
                     let pong = resp.into_inner();
@@ -279,6 +283,8 @@ impl DhtNode {
                 // This is the core of Kademlia bootstrapping: "who else is near me?"
                 let find_req = tonic::Request::new(crate::proto::v1::FindNodeRequest {
                     target_id: local_id_hex.clone(),
+                    requester_id: local_id_hex.clone(),
+                    requester_address: self.public_addr.clone().unwrap_or_default(),
                 });
                 if let Ok(resp) = client.find_node(find_req).await {
                     let discovered = resp.into_inner().nodes;

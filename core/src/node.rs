@@ -51,7 +51,7 @@ pub struct CloakNode {
 impl CloakNode {
     pub fn new(identity_pubkey: [u8; 32], node_id: String, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String, listen_port: u16, public_addr: Option<String>) -> Self {
         let local_id = DhtKey(identity_pubkey);
-        let dht = Arc::new(DhtNode::new(local_id, mine_atk, bootstrap_peers, data_dir));
+        let dht = Arc::new(DhtNode::new(local_id, mine_atk, bootstrap_peers, data_dir, public_addr.clone()));
         let circuit_manager = Arc::new(CircuitManager::new(5)); // Maintain a pool of 5 circuits
         let bridge = Arc::new(MeshBridge::new(circuit_manager.clone(), dht.clone()));
         let metrics = NodeMetrics::new();
@@ -148,6 +148,24 @@ impl CloakMeshNode for CloakNode {
         tracing::info!("[201] Incoming connection: Received KeepAlive (Ping) from {}", remote_addr);
         
         let ping = request.into_inner();
+        
+        if !ping.requester_id.is_empty() && !ping.requester_address.is_empty() {
+            if let Ok(target_bytes) = hex::decode(&ping.requester_id) {
+                if target_bytes.len() == 32 {
+                    let mut key_bytes = [0u8; 32];
+                    key_bytes.copy_from_slice(&target_bytes);
+                    let peer = crate::routing::dht::PeerInfo {
+                        id: crate::routing::dht::DhtKey(key_bytes),
+                        address: ping.requester_address.clone(),
+                        last_seen: tokio::time::Instant::now(),
+                        reputation: 100,
+                        flags: std::collections::HashSet::new(),
+                    };
+                    self.dht.routing.write().await.add_peer(peer);
+                }
+            }
+        }
+        
         Ok(Response::new(Pong {
             nonce: ping.nonce,
             sent_at: ping.sent_at,
@@ -432,6 +450,23 @@ impl CloakMeshNode for CloakNode {
         
         let req = request.into_inner();
         tracing::info!("[201] Incoming connection: Received FindNode from {} targeting {}", remote_addr, req.target_id);
+
+        if !req.requester_id.is_empty() && !req.requester_address.is_empty() {
+            if let Ok(target_bytes) = hex::decode(&req.requester_id) {
+                if target_bytes.len() == 32 {
+                    let mut key_bytes = [0u8; 32];
+                    key_bytes.copy_from_slice(&target_bytes);
+                    let peer = crate::routing::dht::PeerInfo {
+                        id: crate::routing::dht::DhtKey(key_bytes),
+                        address: req.requester_address.clone(),
+                        last_seen: tokio::time::Instant::now(),
+                        reputation: 100,
+                        flags: std::collections::HashSet::new(),
+                    };
+                    self.dht.routing.write().await.add_peer(peer);
+                }
+            }
+        }
 
         let target_bytes = hex::decode(&req.target_id).map_err(|_| Status::invalid_argument("Invalid target_id hex"))?;
         if target_bytes.len() != 32 { return Err(Status::invalid_argument("Invalid target_id length")); }

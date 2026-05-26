@@ -37,6 +37,8 @@ message Envelope {
 message Ping {
   uint64 nonce = 1;
   google.protobuf.Timestamp sent_at = 2;
+  string requester_id = 3;
+  string requester_address = 4;
 }
 
 message Pong {
@@ -176,6 +178,8 @@ message NodeContact {
 
 message FindNodeRequest {
   string target_id = 1;    // ID being searched for
+  string requester_id = 2;
+  string requester_address = 3;
 }
 
 message FindNodeResponse {
