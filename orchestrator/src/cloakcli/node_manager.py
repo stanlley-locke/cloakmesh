@@ -137,33 +137,31 @@ class NodeManager:
 
     def status(self) -> dict:
         """Return a status dict: {running, pid, port, log_file}."""
-        if not self.pid_file.exists():
-            return {"running": False, "pid": None, "port": self.port}
-        pid = int(self.pid_file.read_text())
-        try:
-            os.kill(pid, 0)
-            return {"running": True, "pid": pid, "port": self.port, "log": str(self.log_file)}
-        except ProcessLookupError:
-            self.pid_file.unlink(missing_ok=True)
-            return {"running": False, "pid": pid, "port": self.port}
+        for n in self.list_running():
+            if n["port"] == self.port:
+                n["log"] = str(self.log_file)
+                return n
+        return {"running": False, "pid": None, "port": self.port}
 
     @classmethod
     def list_running(cls) -> List[dict]:
-        """List all running nodes based on PID files in PID_DIR."""
-        cls.PID_DIR.mkdir(parents=True, exist_ok=True)
+        """List all running nodes by scanning process table."""
+        import subprocess
         results = []
-        for pid_file in sorted(cls.PID_DIR.glob("node-*.pid")):
-            try:
-                port = int(pid_file.stem.split("-")[1])
-                pid = int(pid_file.read_text())
-                try:
-                    os.kill(pid, 0)
-                    results.append({"running": True, "pid": pid, "port": port})
-                except ProcessLookupError:
-                    pid_file.unlink(missing_ok=True)
-                    results.append({"running": False, "pid": pid, "port": port, "stale": True})
-            except (ValueError, IndexError):
-                continue
+        try:
+            output = subprocess.check_output(['ps', '-eo', 'pid,args'], text=True)
+            for line in output.splitlines():
+                if "cloakmesh" in line and "--port" in line and "cargo" not in line:
+                    parts = line.strip().split()
+                    try:
+                        pid = int(parts[0])
+                        port_idx = parts.index("--port")
+                        port = int(parts[port_idx + 1])
+                        results.append({"running": True, "pid": pid, "port": port})
+                    except (ValueError, IndexError):
+                        continue
+        except Exception:
+            pass
         return results
 
     @classmethod
