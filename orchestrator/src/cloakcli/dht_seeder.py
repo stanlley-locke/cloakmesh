@@ -6,7 +6,7 @@ import os
 
 console = Console()
 
-def publish_descriptor(address: str, config_path: str):
+def publish_descriptor(address: str, config_path: str = "configs/default.toml", intro_point: str = None):
     client = CloakGrpcClient()
     
     console.print(f"Publishing descriptor for [cyan]{address}[/cyan]...")
@@ -17,10 +17,13 @@ def publish_descriptor(address: str, config_path: str):
         
         # Include the node's gRPC address as an IntroductionPoint so the SOCKS5
         # bridge knows where to route traffic for this .cloak address.
-        grpc_port = int(os.environ.get("CLOAK_GRPC_PORT", 4001))
-        node_grpc_address = f"127.0.0.1:{grpc_port}"
+        if intro_point:
+            node_grpc_address = intro_point
+        else:
+            grpc_port = int(os.environ.get("CLOAK_GRPC_PORT", 4001))
+            node_grpc_address = os.environ.get("CLOAK_PUBLIC_ADDR", f"127.0.0.1:{grpc_port}")
         
-        intro_point = cloak_service_pb2.IntroductionPoint(
+        ip_msg = cloak_service_pb2.IntroductionPoint(
             peer_id="",
             address=node_grpc_address,
             auth_key=b"",
@@ -30,7 +33,7 @@ def publish_descriptor(address: str, config_path: str):
             cloak_address=address,
             identity_pubkey=pubkey,
             version=1,
-            intro_points=[intro_point],
+            intro_points=[ip_msg],
         )
         
         response = client.service_stub.PublishDescriptor(descriptor)

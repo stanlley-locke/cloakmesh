@@ -387,7 +387,7 @@ def site_init(dir_name: str):
     console.print(f"[green]SUCCESS:[/green] Created beautiful static site in {dir_name}/index.html")
 
 @app.command(help="Host a static site folder on the network")
-def host_static(dir_name: str, port: int = typer.Argument(8080)):
+def host_static(dir_name: str, port: int = typer.Argument(8080), intro_point: str = typer.Option(None, "--intro-point", help="Public URL/IP of the hosting node")):
     import os
     import subprocess
     import threading
@@ -415,7 +415,7 @@ def host_static(dir_name: str, port: int = typer.Argument(8080)):
             console.print(f"[green]SUCCESS:[/green] Started static server on port {port} and bridged to [bold cyan]{address}[/bold cyan]")
             from cloakcli.dht_seeder import publish_descriptor
             console.print("[cyan]Auto-publishing to DHT...[/cyan]")
-            publish_descriptor(address, "configs/default.toml")
+            publish_descriptor(address, intro_point=intro_point)
             console.print(f"[magenta]Your site is LIVE in the background![/magenta] Browse it with: cloakcli browse {address}")
         else:
             console.print(f"[red]FAILED to bridge:[/red] {getattr(response, 'message', 'Unknown Error')}")
@@ -446,9 +446,9 @@ def dht_fetch(address: str):
     fetch_descriptor(address)
 
 @app.command(help="Publish a DHT descriptor")
-def dht_publish(address: str):
+def dht_publish(address: str, intro_point: str = typer.Option(None, "--intro-point", help="Public URL/IP of the hosting node")):
     from cloakcli.dht_seeder import publish_descriptor
-    publish_descriptor(address, "configs/default.toml")
+    publish_descriptor(address, intro_point=intro_point)
 
 @app.command(help="Issue a capability token")
 def auth_issue(address: str, scope: str = "read", ttl: int = 3600):
