@@ -176,7 +176,13 @@ impl MeshBridge {
                 // In a full onion routing setup, this would go through guard/middle relays.
                 // The intro_point IS the node hosting the site, so we send a TunnelStream request
                 // with an empty path (meaning: "you are the destination").
-                let channel = tonic::transport::Channel::from_shared(format!("http://{}", target_ip))
+                let endpoint_url = if target_ip.starts_with("http://") || target_ip.starts_with("https://") {
+                    target_ip.clone()
+                } else {
+                    format!("http://{}", target_ip)
+                };
+
+                let channel = tonic::transport::Channel::from_shared(endpoint_url)
                     .map_err(|e| CloakError::Other(anyhow::anyhow!(e)))?
                     .connect().await
                     .map_err(|e| CloakError::Other(anyhow::anyhow!("Cannot reach intro point {}: {}", target_ip, e)))?;
