@@ -242,8 +242,7 @@ impl DhtNode {
 
         for auth in &self.authorities {
             debug!("Querying authority: {}", auth);
-            let addr = format!("http://{}", auth);
-            if let Ok(mut client) = CloakMeshNodeClient::connect(addr.clone()).await {
+            if let Ok(mut client) = CloakMeshNodeClient::connect(auth.clone()).await {
                 // Step 1: Ping to add the authority itself to our routing table
                 let req = tonic::Request::new(crate::proto::v1::Ping {
                     nonce: 0,
@@ -375,8 +374,7 @@ impl DhtNode {
                 continue;
             }
 
-            let connect_addr = format!("http://{}", addr);
-            if let Ok(mut client) = CloakMeshNodeClient::connect(connect_addr).await {
+            if let Ok(mut client) = CloakMeshNodeClient::connect(addr.clone()).await {
                 let req = tonic::Request::new(FindValueRequest {
                     target_key: hex::encode(&key.0),
                 });
@@ -426,8 +424,7 @@ impl DhtNode {
 
         // 4. Push value to each target
         for addr in targets {
-            let connect_addr = format!("http://{}", addr);
-            if let Ok(mut client) = CloakMeshNodeClient::connect(connect_addr).await {
+            if let Ok(mut client) = CloakMeshNodeClient::connect(addr.clone()).await {
                 let req = tonic::Request::new(StoreValueRequest {
                     key: hex::encode(&key.0),
                     value: value.clone(),

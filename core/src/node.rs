@@ -42,13 +42,14 @@ pub struct CloakNode {
     node_id: String,
     identity_pubkey: [u8; 32],
     listen_port: u16,
+    public_addr: Option<String>,
     start_time: std::time::Instant,
     /// Gossip deduplication: tracks message IDs we've already forwarded.
     seen_gossip: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
 }
 
 impl CloakNode {
-    pub fn new(identity_pubkey: [u8; 32], node_id: String, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String, listen_port: u16) -> Self {
+    pub fn new(identity_pubkey: [u8; 32], node_id: String, mine_atk: bool, bootstrap_peers: Vec<String>, data_dir: String, listen_port: u16, public_addr: Option<String>) -> Self {
         let local_id = DhtKey(identity_pubkey);
         let dht = Arc::new(DhtNode::new(local_id, mine_atk, bootstrap_peers, data_dir));
         let circuit_manager = Arc::new(CircuitManager::new(5)); // Maintain a pool of 5 circuits
@@ -65,7 +66,7 @@ impl CloakNode {
         dht.clone().start_maintenance();
         let start_time = std::time::Instant::now();
         let seen_gossip = Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
-        Self { dht, circuit_manager, bridge, metrics, node_id, identity_pubkey, listen_port, start_time, seen_gossip }
+        Self { dht, circuit_manager, bridge, metrics, node_id, identity_pubkey, listen_port, public_addr, start_time, seen_gossip }
     }
     
     pub async fn start_proxy(self: Arc<Self>, port: u16) -> CloakResult<()> {
@@ -143,6 +144,9 @@ impl CloakMeshNode for CloakNode {
         &self,
         request: Request<Ping>,
     ) -> Result<Response<Pong>, Status> {
+        let remote_addr = request.remote_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".into());
+        tracing::info!("[201] Incoming connection: Received KeepAlive (Ping) from {}", remote_addr);
+        
         let ping = request.into_inner();
         Ok(Response::new(Pong {
             nonce: ping.nonce,
@@ -424,7 +428,11 @@ impl CloakMeshNode for CloakNode {
         &self,
         request: Request<FindNodeRequest>,
     ) -> Result<Response<FindNodeResponse>, Status> {
+        let remote_addr = request.remote_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".into());
+        
         let req = request.into_inner();
+        tracing::info!("[201] Incoming connection: Received FindNode from {} targeting {}", remote_addr, req.target_id);
+
         let target_bytes = hex::decode(&req.target_id).map_err(|_| Status::invalid_argument("Invalid target_id hex"))?;
         if target_bytes.len() != 32 { return Err(Status::invalid_argument("Invalid target_id length")); }
         let mut key_bytes = [0u8; 32];
@@ -437,9 +445,10 @@ impl CloakMeshNode for CloakNode {
         let mut closest = self.dht.get_closest_peers(&target_key, 20).await;
         
         // Include self in the response so bootstrapping nodes discover us
+        let self_address = self.public_addr.clone().unwrap_or_else(|| format!("127.0.0.1:{}", self.listen_port));
         closest.push(crate::routing::dht::PeerInfo {
             id: DhtKey(self.identity_pubkey),
-            address: format!("127.0.0.1:{}", self.listen_port),
+            address: self_address,
             last_seen: tokio::time::Instant::now(),
             reputation: 100,
             flags: std::collections::HashSet::new(),

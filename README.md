@@ -226,6 +226,7 @@ SOCKS5 port formula: `SOCKS5 = gRPC_port + 5049`
 | Document | Description |
 |----------|-------------|
 | [TESTING_GUIDE.md](./TESTING_GUIDE.md) | Complete end-to-end testing walkthrough |
+| [docs/BOOTSTRAPPING.md](./docs/BOOTSTRAPPING.md) | **Bootstrap guide** — alpha setup, URL formats, Codespaces, peers files |
 | [docs/CLI_REFERENCE.md](./docs/CLI_REFERENCE.md) | Full command reference with examples |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System architecture overview |
 | [docs/PROTOCOL.md](./docs/PROTOCOL.md) | .cloak protocol specification |
@@ -235,7 +236,9 @@ SOCKS5 port formula: `SOCKS5 = gRPC_port + 5049`
 | [docs/WALLET.md](./docs/WALLET.md) | ATK token system |
 | [docs/CRYPTO.md](./docs/CRYPTO.md) | Cryptographic primitives reference |
 | [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md) | Privacy threat model |
+| [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Production deployment guide |
 | [docs/ERROR_CODES.md](./docs/ERROR_CODES.md) | Structured error code reference |
+| [docs/FEATURES_COMPLIANCE.md](./docs/FEATURES_COMPLIANCE.md) | Feature implementation status matrix |
 | [core/README.md](./core/README.md) | Rust core engine guide |
 | [orchestrator/README.md](./orchestrator/README.md) | Python orchestrator guide |
 

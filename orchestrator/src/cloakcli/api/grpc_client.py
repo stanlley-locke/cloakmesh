@@ -15,7 +15,9 @@ from proto import telemetry_pb2  # noqa: E402
 from proto import telemetry_pb2_grpc  # noqa: E402
 
 class CloakGrpcClient:
-    def __init__(self, host="127.0.0.1", port=4001):
+    def __init__(self, host="127.0.0.1", port=None):
+        if port is None:
+            port = int(os.environ.get("CLOAK_GRPC_PORT", "4001"))
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.node_stub = cloakmesh_pb2_grpc.CloakMeshNodeStub(self.channel)
         self.service_stub = cloak_service_pb2_grpc.CloakServiceStub(self.channel)

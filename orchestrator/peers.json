@@ -1,0 +1,15 @@
+{
+  "_format": "v1",
+  "network": "cloakmesh-devnet",
+  "peers": [
+    {
+      "address": "127.0.0.1:4001"
+    },
+    {
+      "address": "https://ideal-orbit-pjgjrvxgg7wjhw6-4001.app.github.dev/"
+    },
+    {
+      "address": "203.0.113.10:4001"
+    }
+  ]
+}

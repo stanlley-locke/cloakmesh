@@ -423,12 +423,16 @@ def host_static(dir_name: str, port: int = typer.Argument(8080)):
         client.close()
 
 @app.command(name="address", help="View your node's primary .cloak address")
-def address_cmd():
+def address_cmd(raw: bool = typer.Option(False, "--raw", help="Output only the raw address for scripting")):
     metrics = get_node_metrics()
     if not metrics:
-        console.print("[red]Node is unreachable.[/red]")
+        if not raw: console.print("[red]Node is unreachable.[/red]")
         return
     
+    if raw:
+        print(metrics.cloak_address)
+        return
+        
     console.print(Panel(
         f"[bold cyan]{metrics.cloak_address}[/bold cyan]",
         title="[bold green]Your Node Identity[/bold green]",
@@ -503,7 +507,7 @@ def relays():
             table.add_column("Latency")
             for r in res.relays:
                 table.add_row(
-                    r.node_id[:16] + "...",
+                    r.id[:16] + "...",
                     r.address,
                     str(getattr(r, 'reputation', 'N/A')),
                     f"{getattr(r, 'avg_latency_ms', 0)}ms"

@@ -27,11 +27,10 @@ use cloakmesh_core::{
 fn normalize_peer_addr(raw: &str) -> Result<String> {
     let trimmed = raw.trim().trim_end_matches('/');
 
-    // If it doesn't look like a URL, treat as host:port directly
+    // If it doesn't look like a URL, treat as http://host:port directly
     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
-        // Validate it contains a colon (host:port)
         if trimmed.contains(':') {
-            return Ok(trimmed.to_string());
+            return Ok(format!("http://{}", trimmed));
         }
         anyhow::bail!("Bootstrap peer '{}' is not a valid host:port or URL", raw);
     }
@@ -39,54 +38,22 @@ fn normalize_peer_addr(raw: &str) -> Result<String> {
     let parsed = url::Url::parse(trimmed)
         .with_context(|| format!("Cannot parse bootstrap URL: '{}'", raw))?;
 
+    let scheme = parsed.scheme();
     let host = parsed
         .host_str()
         .with_context(|| format!("No host in bootstrap URL: '{}'", raw))?;
 
+    // We do not embed the extracted Codespaces gRPC port into the URI if it's HTTPS.
+    // GitHub Codespaces exposes the app over standard HTTPS port 443 via its reverse proxy.
+    // So if the scheme is https, we can just return the origin (e.g. https://...app.github.dev).
+    
     // Case 1: Explicit port in URL — use it directly
     if let Some(port) = parsed.port() {
-        return Ok(format!("{}:{}", host, port));
+        return Ok(format!("{}://{}:{}", scheme, host, port));
     }
 
-    // Case 2: GitHub Codespaces / similar: port embedded in subdomain
-    // Pattern: <name>-<PORT>.app.github.dev  or  <name>-<PORT>.preview.app.github.dev
-    // We extract the last dash-separated segment before the TLD zone.
-    if let Some(port) = extract_port_from_subdomain(host) {
-        tracing::debug!(
-            "Extracted gRPC port {} from Codespaces-style host '{}'",
-            port, host
-        );
-        return Ok(format!("{}:{}", host, port));
-    }
-
-    // Case 3: Fallback — use HTTPS default port 443 (TLS gRPC)
-    let default_port: u16 = if trimmed.starts_with("https://") { 443 } else { 80 };
-    tracing::warn!(
-        "Could not determine gRPC port for '{}'; falling back to port {}",
-        host,
-        default_port
-    );
-    Ok(format!("{}:{}", host, default_port))
-}
-
-/// Try to extract a port number embedded in a hostname's subdomain label.
-///
-/// GitHub Codespaces URL format:
-///   `<random-workspace-id>-<PORT>.app.github.dev`
-///
-/// We scan each `-`-separated segment right-to-left looking for a valid u16.
-fn extract_port_from_subdomain(host: &str) -> Option<u16> {
-    // Take only the first label (before the first '.')
-    let first_label = host.split('.').next()?;
-    // Scan dash-separated parts right to left
-    for part in first_label.rsplit('-') {
-        if let Ok(port) = part.parse::<u16>() {
-            if port > 0 {
-                return Some(port);
-            }
-        }
-    }
-    None
+    // Case 2 & 3: Just return the host with its scheme. Tonic will use 443 for https, 80 for http.
+    Ok(format!("{}://{}", scheme, host))
 }
 
 /// Parse a peer list from a JSON file.
@@ -349,6 +316,7 @@ async fn main() -> Result<()> {
         config.bootstrap_peers.clone(),
         config.data_dir.to_string_lossy().into_owned(),
         config.listen_port,
+        public_addr,
     ));
 
     let addr = format!("0.0.0.0:{}", config.listen_port).parse()?;
