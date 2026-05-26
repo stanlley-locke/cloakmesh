@@ -2,7 +2,7 @@ import time
 import sys
 import os
 import threading
-from typing import Optional
+from typing import List, Optional
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -558,23 +558,70 @@ def list_files():
 def node_start(
     port: int = typer.Option(4001, "--port", "-p", help="gRPC listen port"),
     node_id: str = typer.Option("", "--id", help="Node identifier"),
-    bootstrap: str = typer.Option("", "--bootstrap", help="Bootstrap peer address (host:port)"),
-    mine_atk: bool = typer.Option(False, "--mine-atk", help="Enable persistent storage and ATK mining"),
+    bootstrap: List[str] = typer.Option([], "--bootstrap", "-b",
+        help="Bootstrap peer: host:port, https://URL, or Codespaces URL. Repeatable."),
+    peers_file: str = typer.Option("", "--peers-file",
+        help="Path to JSON peers file with bootstrap list"),
+    public_addr: str = typer.Option("", "--public-addr",
+        help="Public address to announce (host:port or URL). Default: 127.0.0.1:<port>"),
+    mine_atk: bool = typer.Option(False, "--mine-atk",
+        help="Enable persistent Sled storage and ATK token mining"),
 ):
     from cloakcli.node_manager import NodeManager
-    manager = NodeManager(port=port, bootstrap=bootstrap)
+    manager = NodeManager(
+        port=port,
+        node_id=node_id,
+        bootstrap_peers=list(bootstrap),
+        peers_file=peers_file or None,
+        public_addr=public_addr or None,
+        mine_atk=mine_atk,
+    )
     manager.start()
-    console.print(f"[green]Node started[/green] on gRPC port [cyan]{port}[/cyan] | SOCKS5 on [cyan]{port + 5049}[/cyan]")
-    if node_id:
-        console.print(f"[dim]Node ID: {node_id}[/dim]")
 
 @app.command(name="node-stop", help="Stop a background CloakMesh node")
 def node_stop(
     port: int = typer.Option(4001, "--port", "-p", help="gRPC port of the node to stop"),
 ):
     from cloakcli.node_manager import NodeManager
-    manager = NodeManager(port=port)
-    manager.stop()
+    NodeManager(port=port).stop()
+
+@app.command(name="node-status", help="Check status of a background CloakMesh node")
+def node_status(
+    port: int = typer.Option(4001, "--port", "-p", help="gRPC port"),
+):
+    from cloakcli.node_manager import NodeManager
+    s = NodeManager(port=port).status()
+    if s["running"]:
+        console.print(f"[green]RUNNING[/green] port={s['port']} pid={s['pid']} log={s.get('log', 'N/A')}")
+    else:
+        console.print(f"[red]STOPPED[/red] port={s['port']}")
+
+@app.command(name="node-list", help="List all running background CloakMesh nodes")
+def node_list():
+    from cloakcli.node_manager import NodeManager
+    from rich.table import Table
+    nodes = NodeManager.list_running()
+    if not nodes:
+        console.print("[yellow]No running nodes found.[/yellow]")
+        return
+    table = Table(title="Running CloakMesh Nodes", box=box.ROUNDED)
+    table.add_column("Port", style="cyan")
+    table.add_column("SOCKS5", style="magenta")
+    table.add_column("PID")
+    table.add_column("Status")
+    for n in nodes:
+        status_str = "[green]RUNNING[/green]" if n["running"] else "[red]STOPPED[/red]"
+        table.add_row(str(n["port"]), str(n["port"] + 5049), str(n["pid"]), status_str)
+    console.print(table)
+
+@app.command(name="peers-gen", help="Generate a JSON peers file from a list of addresses")
+def peers_gen(
+    addresses: List[str] = typer.Argument(..., help="Peer addresses (host:port or URLs)"),
+    output: str = typer.Option("peers.json", "--output", "-o", help="Output JSON file path"),
+    network: str = typer.Option("cloakmesh-devnet", "--network", help="Network name"),
+):
+    from cloakcli.node_manager import NodeManager
+    NodeManager.generate_peers_file(list(addresses), output, network)
 
 @app.command(name="auth-verify", help="Verify a capability token JSON string")
 def auth_verify(token_json: str):

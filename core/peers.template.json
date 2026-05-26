@@ -1,0 +1,22 @@
+{
+  "_comment": "CloakMesh peer list. Bootstrap addresses can be host:port, https://host:port/ URLs, or GitHub Codespaces URLs.",
+  "_format": "v1",
+  "network": "cloakmesh-mainnet",
+  "peers": [
+    {
+      "address": "https://YOUR-CODESPACE-NAME-4001.app.github.dev/",
+      "id": "codespace-alpha",
+      "note": "Replace with your actual Codespaces forwarding URL"
+    },
+    {
+      "address": "YOUR-VPS-IP:4001",
+      "id": "vps-relay",
+      "note": "Replace with your VPS IP and gRPC port"
+    },
+    {
+      "address": "peer.example.com:4001",
+      "id": "domain-peer",
+      "note": "Domain name with explicit port also works"
+    }
+  ]
+}

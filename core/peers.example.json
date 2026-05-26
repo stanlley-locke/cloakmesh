@@ -1,0 +1,17 @@
+{
+  "_comment": "CloakMesh peer list file. Add your bootstrap peers here.",
+  "_format": "v1",
+  "network": "cloakmesh-devnet",
+  "peers": [
+    {
+      "address": "127.0.0.1:4001",
+      "id": "node-alpha",
+      "note": "Local bootstrap authority"
+    },
+    {
+      "address": "127.0.0.1:4002",
+      "id": "node-beta",
+      "note": "Local relay node"
+    }
+  ]
+}

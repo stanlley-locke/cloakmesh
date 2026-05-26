@@ -75,6 +75,9 @@ async-stream = "0.3"
 # Metrics
 prometheus = "0.13"
 
+# URL parsing for bootstrap peer addresses
+url = "2.5"
+
 # Collections
 indexmap = "2.0"
 reed-solomon-erasure = "6.0.0"

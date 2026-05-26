@@ -802,6 +802,7 @@ dependencies = [
  "tonic-build",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
  "x25519-dalek",
  "zeroize",
