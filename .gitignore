@@ -43,3 +43,5 @@ core/src/proto/
 cloak-browser/obj*/
 cloak-browser/.mozbuild/logs/
 core/data/
+core/data_*/
+orchestrator/data_*/
