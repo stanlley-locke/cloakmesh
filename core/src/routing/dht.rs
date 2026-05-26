@@ -244,17 +244,18 @@ impl DhtNode {
 
         for auth in &self.authorities {
             debug!("Querying authority: {}", auth);
-            if let Ok(mut client) = CloakMeshNodeClient::connect(auth.clone()).await {
-                // Step 1: Ping to add the authority itself to our routing table
-                let req = tonic::Request::new(crate::proto::v1::Ping {
-                    nonce: 0,
-                    sent_at: Some(prost_types::Timestamp {
-                        seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64,
-                        nanos: 0,
-                    }),
-                    requester_id: local_id_hex.clone(),
-                    requester_address: self.public_addr.clone().unwrap_or_default(),
-                });
+            match CloakMeshNodeClient::connect(auth.clone()).await {
+                Ok(mut client) => {
+                    // Step 1: Ping to add the authority itself to our routing table
+                    let req = tonic::Request::new(crate::proto::v1::Ping {
+                        nonce: 0,
+                        sent_at: Some(prost_types::Timestamp {
+                            seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64,
+                            nanos: 0,
+                        }),
+                        requester_id: local_id_hex.clone(),
+                        requester_address: self.public_addr.clone().unwrap_or_default(),
+                    });
                 if let Ok(resp) = client.keep_alive(req).await {
                     let pong = resp.into_inner();
                     if let Ok(bytes) = hex::decode(&pong.node_id) {
@@ -308,8 +309,10 @@ impl DhtNode {
                         }
                     }
                 }
-            } else {
-                tracing::warn!("Failed to connect to bootstrap peer {}", auth);
+                }
+                Err(e) => {
+                    tracing::error!("[201] Failed to connect to bootstrap authority {}: {:?}", auth, e);
+                }
             }
         }
         Ok(())

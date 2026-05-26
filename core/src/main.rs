@@ -323,6 +323,7 @@ async fn main() -> Result<()> {
     info!("[200] gRPC server starting, addr: {}", addr);
 
     let server = tonic::transport::Server::builder()
+        .accept_http1(true)
         .add_service(cloakmesh_core::proto::v1::cloak_mesh_node_server::CloakMeshNodeServer::from_arc(node.clone()))
         .add_service(cloakmesh_core::proto::v1::cloak_service_server::CloakServiceServer::from_arc(node.clone()))
         .add_service(cloakmesh_core::proto::v1::capability_service_server::CapabilityServiceServer::from_arc(node.clone()))
